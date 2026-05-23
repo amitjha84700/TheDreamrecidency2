@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 
@@ -418,7 +419,7 @@ const DEFAULTS = {
   amenities: 'Free Wi-Fi, 24x7 Room Service, Restaurant, Power Backup, Laundry, Travel Desk',
   phone: '+91 00000 00000',
   phone2: '',
-  email: 'contact@dreamresidency.com',
+  email: 'doremon69sizuka@gmail.com',
   address: 'Your address here',
   admin_email: process.env.ADMIN_EMAIL || 'doremon69sizuka@gmail.com',
   smtp_host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -431,12 +432,15 @@ const DEFAULTS = {
 };
 
 async function initDefaults() {
+  console.log('[DB] Initializing site content defaults...');
   for (const [k, v] of Object.entries(DEFAULTS)) {
     await db.run(
       'INSERT INTO site_content (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING',
       [k, v ?? '']
     );
   }
+  console.log('[DB] Initial insert complete');
+
   // Backfill env vars over blank rows (covers existing DBs on fresh deploys)
   const envMap = {
     smtp_host: process.env.SMTP_HOST,
@@ -454,6 +458,8 @@ async function initDefaults() {
       );
     }
   }
+  console.log('[DB] Environment variable backfill complete');
+
   // Ensure SMTP/image defaults are never blank
   const blankFills = [
     ['smtp_host', 'smtp.gmail.com'],
@@ -471,6 +477,11 @@ async function initDefaults() {
       [v, k]
     );
   }
+  console.log('[DB] ✓ SMTP defaults configured:', {
+    smtp_user: 'doremon69sizuka@gmail.com',
+    smtp_host: 'smtp.gmail.com',
+    smtp_pass: '✓ set'
+  });
   // Ensure room type images never blank
   await db.run("UPDATE room_types SET image='img/room-suite.jpg'    WHERE slug='suite'  AND (image IS NULL OR image='')");
   await db.run("UPDATE room_types SET image='img/room-deluxe.jpg'   WHERE slug='deluxe' AND (image IS NULL OR image='')");
@@ -649,24 +660,42 @@ function buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddre
 
 async function sendMail({ to, subject, html, text }) {
   try {
-    const host = await getSetting('smtp_host');
-    const user = await getSetting('smtp_user');
-    const pass = await getSetting('smtp_pass');
-    if (!host || !user || !pass) return { sent: false, reason: 'SMTP not configured.' };
-    const port = parseInt(await getSetting('smtp_port', '587'));
+    // Validate email address
+    if (!to || !String(to).includes('@')) {
+      console.error('[EMAIL ERROR] Invalid recipient email:', to);
+      return { sent: false, reason: 'Invalid recipient email address' };
+    }
+
+    // Use DEFAULTS as fallback if database doesn't have values
+    const host = await getSetting('smtp_host', DEFAULTS.smtp_host || 'smtp.gmail.com');
+    const user = await getSetting('smtp_user', DEFAULTS.smtp_user || 'doremon69sizuka@gmail.com');
+    const pass = await getSetting('smtp_pass', DEFAULTS.smtp_pass || 'asdc bpya nrke zxbh');
+    const port = parseInt(await getSetting('smtp_port', DEFAULTS.smtp_port || '587'));
+
+    console.log('[EMAIL] Attempting to send email...');
+    console.log('[EMAIL] From:', user, 'To:', to, 'Host:', host, 'Port:', port);
+
+    if (!host || !user || !pass) {
+      console.error('[EMAIL ERROR] Missing SMTP config:', { host: !!host, user: !!user, pass: !!pass });
+      return { sent: false, reason: 'SMTP not configured.' };
+    }
+
     const transporter = nodemailer.createTransport({
       host, port, secure: port === 465,
       auth: { user, pass },
       tls: { rejectUnauthorized: false },
     });
-    const fromName = await getSetting('smtp_from_name', 'The Dream Residency');
-    const adminCc = await getSetting('admin_email') || null;
+
+    const fromName = await getSetting('smtp_from_name', DEFAULTS.smtp_from_name || 'The Dream Residency');
+    const adminCc = await getSetting('admin_email', DEFAULTS.admin_email) || null;
     const mailOpts = { from: `"${fromName}" <${user}>`, to, subject, text, html };
     if (adminCc && adminCc !== user) mailOpts.cc = adminCc;
+
     await transporter.sendMail(mailOpts);
+    console.log('[EMAIL] ✓ Email sent successfully to:', to);
     return { sent: true };
   } catch (err) {
-    console.error('[EMAIL ERROR]', err.message);
+    console.error('[EMAIL ERROR]', err.message, err.code);
     return { sent: false, reason: err.message };
   }
 }
@@ -708,10 +737,22 @@ async function startServer() {
   await seedRoomTypes();
   await initDefaults();
 
+  // 5. Verify SMTP configuration is loaded
+  const smtpHost = await getSetting('smtp_host');
+  const smtpUser = await getSetting('smtp_user');
+  const smtpPass = await getSetting('smtp_pass');
+  const adminEmail = await getSetting('admin_email');
+  console.log('[STARTUP] ✓ SMTP Configuration loaded:');
+  console.log(`  Host: ${smtpHost}`);
+  console.log(`  User: ${smtpUser}`);
+  console.log(`  Port: ${await getSetting('smtp_port')}`);
+  console.log(`  Admin Email: ${adminEmail}`);
+  console.log(`  Password: ${smtpPass ? '✓ SET' : '✗ MISSING'}`);
+
   // ── Express setup ─────────────────────────────────────────────────────────
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use(require('cookie-parser')());
+  app.use(cookieParser());
 
   // Session store: PostgreSQL or SQLite
   let sessionStore;
