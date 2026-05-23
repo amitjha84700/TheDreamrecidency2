@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "BpCcxOu7l9sORcyMPbCrb"
+uri = "file://dream-residency-updated.zip"
+type = "unspecified"
+title = "Dream Residency — PostgreSQL Edition (data persists permanently)"
+
+[[outputs]]
+id = "vcTVcSpkTuRBJrWbSff7U"
+uri = "file://dream-residency-changes-only.zip"
+type = "unspecified"
+title = "Changed files only — server.js + package.json"

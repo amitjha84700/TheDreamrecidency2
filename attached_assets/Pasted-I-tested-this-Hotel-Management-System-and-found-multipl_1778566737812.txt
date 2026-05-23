@@ -1,0 +1,146 @@
+I tested this Hotel Management System and found multiple issues after deployment. Inside your environment most features work correctly, but after downloading the project, pushing to GitHub, and hosting on Render/VPS, many features stop working properly. I need you to professionally fix and stabilize the entire backend, booking workflow, storage system, and email configuration without breaking the existing frontend UI.
+
+IMPORTANT:
+Use this email for all booking confirmation emails, customer communication, SMTP configuration, and admin notifications:
+
+[thedreamresidency.mumbai@gmail.com](mailto:thedreamresidency.mumbai@gmail.com)
+
+Main Problems:
+
+1. Booking requests disappear after restart/login/deployment instead of saving permanently.
+2. SMTP/email confirmation fails after deployment with “SMTP not configured”.
+3. Current storage system is not stable for production hosting.
+4. Dashboard and booking lifecycle are incomplete.
+5. Room assignment workflow is unnecessarily complex.
+
+Required Fixes:
+
+1. Permanent Database Storage
+
+* Implement a proper production-ready database architecture for permanent storage.
+* All booking requests, confirmed bookings, customer details, payment records, and uploaded documents must persist permanently after deployment/restart.
+* Older booking requests should never disappear.
+* New bookings should append below older ones automatically.
+* Add proper collections/tables, timestamps, indexing, validation, and scalable backend structure.
+
+2. Fix SMTP / Email System
+
+* Configure SMTP so it works properly both inside development environment and after deployment on external hosting platforms.
+* Use environment variables properly instead of temporary/local configuration.
+* Add proper error handling, logging, transporter verification, retry handling, and production-safe setup.
+* Make confirmation emails reliable and stable after deployment.
+* Make phone number, footer message, and email content configurable from backend/server configuration.
+* Keep professional email design but remove room number from customer confirmation email.
+* Use the configured Gmail account:
+  [thedreamresidency.mumbai@gmail.com](mailto:thedreamresidency.mumbai@gmail.com)
+
+3. Confirmed Booking Workflow
+   Once a booking is confirmed:
+
+* Automatically move it into “Confirmed Bookings”.
+* Admin should be able to:
+
+  * Edit booking/customer details
+  * Assign room number manually
+  * Upload/view customer documents
+  * Handle check-in/check-out
+  * Track payment status
+
+IMPORTANT:
+
+* The room type selected by the customer during booking must automatically carry forward into admin panel.
+* Remove old room creation workflow completely.
+* Admin should only manually enter room number.
+* Assigned room number must reflect everywhere:
+  dashboard, reports, booking history, exports, and sheets.
+
+4. Manual Booking System
+   Add “Create Manual Booking” feature inside admin panel for walk-in and phone-call customers.
+
+Fields:
+
+* Customer Name
+* Phone
+* Email
+* Address
+* Guest Count
+* Room Type
+* Room Number
+* Check-in / Check-out
+* Payment Details
+* ID Number
+* Notes
+
+Manual bookings should automatically become CONFIRMED and follow the same workflow as online bookings.
+
+5. Booking Request Table Improvements
+   Convert booking requests into professional CRM-style table format with:
+
+* Multi-select checkboxes
+* Bulk actions:
+  delete, confirm, send email, merge
+* Search/filter/sort
+* Pagination
+* Edit/modify icon beside confirmation button
+* Ability to edit booking details before confirmation
+
+6. Guest Document Upload System
+   After confirmation email:
+
+* Customer should be able to upload ID documents.
+* Upload fields should dynamically generate based on guest count.
+  Example:
+  1 guest = 1 upload field
+  4 guests = 4 upload fields
+
+Also show:
+
+* “Upload now for faster check-in”
+  OR
+* “Submit during check-in”
+
+7. Cloud Document Storage Integration
+   Add backend configuration for cloud storage integration using a single configurable base folder/link.
+
+For every confirmed booking:
+
+* Automatically create customer folder
+* Store all guest documents inside
+* Generate unique folder link
+* Save folder link in database and reports
+
+8. Google Sheets Integration
+   Integrate this Google Sheet:
+   [https://docs.google.com/spreadsheets/d/1KSKKQJczJNMk2oHONh9fkt4EVQzU1FdP-22lxs6WKPo/edit?usp=sharing](https://docs.google.com/spreadsheets/d/1KSKKQJczJNMk2oHONh9fkt4EVQzU1FdP-22lxs6WKPo/edit?usp=sharing)
+
+Store all booking/customer details including:
+
+* Name
+* Phone
+* Email
+* Address
+* ID Number
+* Room Type
+* Room Number
+* Guest Count
+* Check-in/check-out
+* Payment status
+* Booking status
+* Document folder link
+
+9. Deployment Stability
+   Make the project fully production-ready and stable after deployment.
+
+Provide:
+
+* Proper environment variable configuration
+* Deployment-ready backend structure
+* Setup guide
+* SMTP setup guide
+* Cloud storage setup
+* Google Sheets setup
+* Production-safe startup configuration
+
+IMPORTANT:
+Do not break existing frontend/admin UI.
+Keep APIs compatible while improving backend stability, persistence, and deployment reliability.

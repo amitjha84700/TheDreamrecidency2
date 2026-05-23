@@ -1,0 +1,1468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Admin – The Dream Residency</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const root = $('root');
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, { credentials: 'same-origin', ...opts });
+  if (res.status === 401) { renderLogin('Session expired. Please sign in again.'); throw new Error('unauth'); }
+  return res.json();
+}
+
+function renderLogin(err = '') {
+  root.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <h1>Admin Login</h1>
+        <p>The Dream Residency</p>
+        <form id="loginForm">
+          <label><span>User ID</span><input id="u" required autocomplete="username" /></label>
+          <label><span>Password</span><input id="p" type="password" required autocomplete="current-password" /></label>
+          <button class="primary" type="submit">Sign In</button>
+          <div class="error" id="err">${err}</div>
+        </form>
+      </div>
+    </div>`;
+  $('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: $('u').value, password: $('p').value })
+    });
+    if (r.ok) renderApp(); else $('err').textContent = 'Invalid credentials';
+  });
+}
+
+let currentTab = 'dashboard';
+
+function renderApp() {
+  root.innerHTML = `
+    <div class="admin-shell">
+      <div class="admin-nav">
+        <div class="brand">The Dream Residency – Admin</div>
+        <div>
+          <a href="/" style="color:#c9a96e;margin-right:14px;">View Site</a>
+          <button class="ghost" id="logoutBtn">Logout</button>
+        </div>
+      </div>
+      <div class="tabs">
+        ${[['dashboard','Dashboard'],['requests','Booking Requests'],['manualbooking','Manual Booking'],['walkin','Walk-In / Check-In'],['visitors','Visitors'],['content','Site Content'],['roomtypes','Room Types'],['rooms','Rooms'],['customers','Customers'],['bookings','Bookings'],['reports','Reports']].map(([t,label]) =>
+          `<button data-t="${t}" class="${t===currentTab?'active':''}">${label}</button>`).join('')}
+      </div>
+      <div class="panel" id="panel"></div>
+    </div>`;
+  $('logoutBtn').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); renderLogin(); };
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { currentTab = b.dataset.t; renderApp(); });
+  ({ dashboard, requests, manualbooking, walkin, visitors, content, roomtypes, rooms, customers, bookings, reports })[currentTab]();
+}
+
+// ---------- Booking Requests ----------
+async function requests() {
+  const reqs = await api('/api/booking-requests');
+  const pending = reqs.filter(r => r.status === 'pending').length;
+  $('panel').innerHTML = `
+    <h2>Booking Requests ${pending ? `<span class="badge pending" style="font-size:13px;vertical-align:middle;">${pending} pending</span>`:''}</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:20px;">Requests submitted by customers from your website. Confirm or reject each one.</p>
+    <table>
+      <thead><tr><th>#</th><th>Submitted</th><th>Guest</th><th>Contact</th><th>Dates</th><th>Guests</th><th>Rooms</th><th>Room Type</th><th>Details</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${reqs.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${(r.created_at||'').slice(0,16).replace('T',' ')}</td>
+          <td><strong>${esc(r.name)}</strong></td>
+          <td>${esc(r.phone)}<br><small class="muted">${esc(r.email||'')}</small></td>
+          <td>${r.check_in}<br>→ ${r.check_out}</td>
+          <td>${r.guests}</td>
+          <td>${r.rooms_required||1}</td>
+          <td>${esc(r.room_type||'Any')}</td>
+          <td style="max-width:240px;">
+            ${(r.guests_list && r.guests_list.length) ? `<button class="ghost" data-vg="${r.id}" style="font-size:11px;padding:4px 8px;">👥 View ${r.guests_list.length} guest(s)</button>` : ''}
+            ${r.message ? `<div style="font-size:12px;margin-top:4px;color:#555;">${esc(r.message)}</div>` : ''}
+          </td>
+          <td><span class="badge ${r.status}">${r.status}</span></td>
+          <td>
+            ${r.status==='pending' ? `<button class="ok" data-confirm="${r.id}">Confirm</button> <button class="danger" data-reject="${r.id}">Reject</button>` : ''}
+            <button class="ghost" data-del="${r.id}" style="margin-top:4px;">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="11" class="muted" style="text-align:center;padding:30px;">No booking requests yet</td></tr>'}
+      </tbody>
+    </table>`;
+  document.querySelectorAll('[data-confirm]').forEach(b => b.onclick = async () => {
+    const reqId = b.dataset.confirm;
+    const r = reqs.find(x => x.id == reqId);
+    openConfirmModal(r);
+  });
+  document.querySelectorAll('[data-reject]').forEach(b => b.onclick = async () => {
+    if (!confirm('Reject this request? The customer will not be notified automatically.')) return;
+    await fetch('/api/booking-requests/' + b.dataset.reject, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'rejected' }) });
+    requests();
+  });
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this request?')) return;
+    await fetch('/api/booking-requests/' + b.dataset.del, { method: 'DELETE' });
+    requests();
+  });
+  document.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => {
+    const r = reqs.find(x => x.id == b.dataset.vg);
+    showGuestsModal(r.guests_list, `Booking Request #${r.id} — ${r.name}`);
+  });
+}
+
+function showGuestsModal(guests, title) {
+  showModal(`
+    <h3 style="margin:0 0 14px;">👥 ${esc(title)}</h3>
+    <p class="muted" style="margin:0 0 16px;font-size:13px;">${guests.length} guest(s) on this booking.</p>
+    <table style="font-size:13px;">
+      <thead><tr><th>#</th><th>Name</th><th>Age</th><th>ID Type</th><th>ID Number</th></tr></thead>
+      <tbody>
+        ${guests.map((g, i) => `
+          <tr>
+            <td>${i===0 ? '★ Primary' : i+1}</td>
+            <td><strong>${esc(g.name||'-')}</strong></td>
+            <td>${esc(g.age||'-')}</td>
+            <td>${esc(g.id_type||'-')}</td>
+            <td>${esc(g.id_no||'-')}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  `);
+}
+
+// ---------- Confirm Request Modal ----------
+async function openConfirmModal(reqRow) {
+  const types = await api('/api/room-types');
+  const rtVal = (reqRow.room_type || '').toLowerCase().trim();
+  const rt = types.find(t => t.slug === rtVal || t.name.toLowerCase() === rtVal) || types[0];
+  const rtPrice = rt ? rt.price : 0;
+  const nights = Math.max(1, Math.round((new Date(reqRow.check_out) - new Date(reqRow.check_in))/86400000));
+  const estimatedTotal = nights * rtPrice * (reqRow.rooms_required || 1);
+
+  const guestsBlock = (reqRow.guests_list && reqRow.guests_list.length) ? `
+    <div class="full" style="background:#faf7f0;border:1px solid #e8dec5;padding:12px 14px;border-radius:4px;font-size:13px;">
+      <strong>Guest details (${reqRow.guests_list.length}):</strong>
+      <ol style="margin:6px 0 0 18px;padding:0;">
+        ${reqRow.guests_list.map(g => `<li>${esc(g.name||'-')}${g.age?` · age ${esc(g.age)}`:''}</li>`).join('')}
+      </ol>
+    </div>` : '';
+
+  showModal(`
+    <h3 style="margin:0 0 6px;">Confirm Booking Request</h3>
+    <p class="muted" style="margin:0 0 18px;">Enter the room number for <strong>${esc(reqRow.name)}</strong>. A confirmation email will be sent to ${esc(reqRow.email||'(no email)')}.</p>
+    <div class="form-grid" style="margin:0;">
+      <div class="full" style="background:#f0f7ff;border:1px solid #b3d9ff;padding:12px 14px;border-radius:4px;font-size:13px;">
+        <strong>Stay:</strong> ${reqRow.check_in} → ${reqRow.check_out} (${nights} night${nights>1?'s':''}) · ${reqRow.guests} guest(s) · ${reqRow.rooms_required||1} room(s) · Preferred type: <strong>${esc(reqRow.room_type||'Any')}</strong>
+      </div>
+      ${guestsBlock}
+      <label><span>Room Type (from request)</span>
+        <input value="${esc(rt ? rt.name : reqRow.room_type||'')}" readonly style="background:#f5f5f5;color:#6b7280;" />
+      </label>
+      <label><span>Internal Price (₹/night)</span>
+        <input value="₹${rtPrice.toLocaleString('en-IN')}" readonly style="background:#f5f5f5;color:#6b7280;" />
+      </label>
+      <label class="full"><span>Assign Room Number *</span>
+        <input id="cf_room_num" placeholder="e.g. 101, 201, 302..." style="font-size:16px;font-weight:700;" />
+        <small style="color:#6b7280;display:block;margin-top:4px;">Type any room number — it will be recorded in the booking</small>
+      </label>
+      <div class="full">
+        <strong>Total (auto-calculated):</strong>
+        <span style="font-size:18px;color:var(--gold-2);margin-left:8px;">₹${estimatedTotal.toLocaleString('en-IN')}</span>
+        <small class="muted"> = ${nights} night(s) × ₹${rtPrice.toLocaleString('en-IN')} × ${reqRow.rooms_required||1} room(s)</small>
+      </div>
+      <div class="full" style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px;">
+        <button class="ghost" onclick="closeModal()">Cancel</button>
+        <button class="primary" id="cf_submit">Confirm & Send Email</button>
+      </div>
+      <div class="full" id="cf_msg"></div>
+    </div>
+  `);
+
+  $('cf_submit').onclick = async () => {
+    const room_number = $('cf_room_num').value.trim();
+    if (!room_number) { $('cf_msg').innerHTML = '<div style="color:#dc2626;">Please enter a room number.</div>'; return; }
+    $('cf_submit').disabled = true; $('cf_msg').innerHTML = 'Confirming…';
+    const r = await fetch(`/api/booking-requests/${reqRow.id}/confirm`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ room_number })
+    });
+    const j = await r.json();
+    if (r.ok) {
+      const note = j.email && j.email.sent
+        ? `✓ Confirmed (Booking #${j.booking_id}). Confirmation email sent to customer.`
+        : `✓ Confirmed and booking #${j.booking_id} created. Total: ₹${(j.total||0).toLocaleString('en-IN')}. (Email not sent: ${j.email && j.email.reason || 'configure SMTP in Site Content'})`;
+      $('cf_msg').innerHTML = `<div style="background:#dcfce7;color:#166534;padding:10px;border-radius:4px;">${note}</div>`;
+      setTimeout(() => { closeModal(); requests(); }, 2000);
+    } else {
+      $('cf_msg').innerHTML = `<div style="color:#dc2626;">${j.error || 'Failed'}</div>`;
+      $('cf_submit').disabled = false;
+    }
+  };
+}
+
+// ---------- Walk-In / Returning Customer Check-In ----------
+async function walkin() {
+  const rms = await api('/api/rooms');
+  $('panel').innerHTML = `
+    <h2>Walk-In Check-In</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:18px;">Search by phone, email or name. Returning guests are auto-detected so you don't have to re-enter their details.</p>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:18px;border-radius:8px;margin-bottom:20px;">
+      <label style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">Search guest by phone / email / name</label>
+      <input id="wi_search" placeholder="Type to search..." style="width:100%;padding:12px;font-size:15px;margin-top:6px;border:1px solid #ddd;border-radius:6px;" />
+      <div id="wi_results" style="margin-top:10px;"></div>
+    </div>
+    <div id="wi_form"></div>`;
+
+  let timer;
+  $('wi_search').oninput = () => {
+    clearTimeout(timer);
+    const q = $('wi_search').value.trim();
+    if (!q) { $('wi_results').innerHTML = ''; return; }
+    timer = setTimeout(async () => {
+      const r = await api('/api/customers/lookup?q=' + encodeURIComponent(q));
+      if (!r.matches.length) {
+        $('wi_results').innerHTML = `<div style="padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;">No matching guest found. <button class="primary" onclick="walkInNewGuest('${q.replace(/'/g,"&#39;")}')">+ Register as New Guest</button></div>`;
+        return;
+      }
+      $('wi_results').innerHTML = r.matches.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:white;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;">
+          <div>
+            <strong>${esc(c.name)}</strong> · ${esc(c.contact||'-')} · ${esc(c.email||'-')}
+            <br><small class="muted">Visits: <strong>${c.booking_count || 0}</strong> · Nights stayed: <strong>${c.total_nights || 0}</strong>${c.last_stay ? ' · Last stay ended: ' + c.last_stay : ''}</small>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="ghost" onclick='viewCustomerHistory(${c.id})'>📜 Full History</button>
+            <button class="primary" onclick='walkInExistingGuest(${c.id})'>Check-In This Guest</button>
+          </div>
+        </div>`).join('');
+    }, 200);
+  };
+
+  window.walkInNewGuest = async (prefill) => {
+    showWalkInForm({ prefill });
+  };
+  window.walkInExistingGuest = async (id) => {
+    const h = await api(`/api/customers/${id}/history`);
+    showWalkInForm({ customer: h.customer, history: h });
+  };
+  window.viewCustomerHistory = async (id) => {
+    const h = await api(`/api/customers/${id}/history`);
+    const inr = n => '₹' + Number(n||0).toLocaleString('en-IN');
+    showModal(`
+      <h3 style="margin:0 0 6px;">📜 ${esc(h.customer.name)} — Full History</h3>
+      <p class="muted" style="margin:0 0 16px;font-size:13px;">${esc(h.customer.contact||'-')} · ${esc(h.customer.email||'-')} · ID: ${esc(h.customer.id_proof||'-')}</p>
+      <div class="history-stats">
+        <div class="h-stat"><div class="label">Visits</div><div class="value">${h.summary.total_visits}</div></div>
+        <div class="h-stat"><div class="label">Nights</div><div class="value">${h.summary.total_nights}</div></div>
+        <div class="h-stat"><div class="label">Revenue</div><div class="value" style="font-size:16px;">${inr(h.summary.total_revenue)}</div></div>
+        <div class="h-stat"><div class="label">Paid</div><div class="value" style="font-size:16px;color:#16a34a;">${inr(h.summary.total_paid)}</div></div>
+      </div>
+      ${h.summary.first_visit ? `<p class="muted" style="font-size:12px;">First visit: ${h.summary.first_visit} · Last visit: ${h.summary.last_visit}</p>` : ''}
+      <h4 style="margin:18px 0 8px;">All Stays (${h.bookings.length})</h4>
+      ${h.bookings.length ? `
+      <table style="font-size:12px;">
+        <thead><tr><th>#</th><th>Room</th><th>Stay</th><th>Nights</th><th>Guests</th><th>Status</th><th>Total</th><th>Paid</th></tr></thead>
+        <tbody>${h.bookings.map(b => `
+          <tr>
+            <td>${b.id}</td>
+            <td>${esc(b.room_number)} <small class="muted">(${esc(b.room_category)})</small></td>
+            <td>${b.check_in} → ${b.check_out}</td>
+            <td>${b.nights||0}</td>
+            <td>${b.guests||1}${(b.guests_list && b.guests_list.length>1)?` <small class="muted">(${b.guests_list.length} listed)</small>`:''}</td>
+            <td><span class="badge ${b.status}">${b.status.replace('_',' ')}</span></td>
+            <td>${inr(b.total)}</td>
+            <td style="color:#16a34a;">${inr(b.paid)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<p class="muted">No stays yet.</p>'}
+      ${h.documents && h.documents.length ? `
+        <h4 style="margin:18px 0 8px;">Documents on file (${h.documents.length})</h4>
+        <ul style="margin:0;padding-left:20px;font-size:13px;">
+          ${h.documents.map(d => `<li><strong>${esc(d.doc_type||'Doc')}</strong> · ${esc(d.original_name||'')} ${d.guest_name?` <small class="muted">— for ${esc(d.guest_name)}</small>`:''} <a href="/api/documents/${d.id}/download" style="margin-left:8px;">Download</a></li>`).join('')}
+        </ul>` : ''}
+    `);
+  };
+
+  function showWalkInForm({ customer, history, prefill }) {
+    const c = customer || {};
+    const inr = n => '₹' + Number(n||0).toLocaleString('en-IN');
+    const histHtml = history && history.bookings.length ? `
+      <div style="background:#eef6ff;border:1px solid #b3d9ff;padding:14px;border-radius:6px;margin:0 0 16px;">
+        <strong>Returning guest!</strong> ${history.summary.total_visits} visit(s) · ${history.summary.total_nights} night(s) total · Revenue: ${inr(history.summary.total_revenue)}
+        <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;">
+          ${history.bookings.slice(0,5).map(b => `<li>Room ${esc(b.room_number)} <small class="muted">(${esc(b.room_category)})</small> · ${b.check_in} → ${b.check_out} · ${b.nights} night(s) · ${b.status}</li>`).join('')}
+        </ul>
+      </div>` : '';
+    const today = new Date().toISOString().slice(0,10);
+    $('wi_form').innerHTML = `
+      ${histHtml}
+      <h3>${customer ? 'Check-In Returning Guest' : 'Register & Check-In New Guest'}</h3>
+      <div class="form-grid">
+        <label><span>Full Name *</span><input id="wi_name" value="${esc(c.name||(prefill||''))}" /></label>
+        <label><span>Phone *</span><input id="wi_phone" value="${esc(c.contact||'')}" /></label>
+        <label><span>Email</span><input id="wi_email" value="${esc(c.email||'')}" /></label>
+        <label><span>ID Proof Type</span>
+          <select id="wi_idtype">
+            <option>Aadhar Card</option><option>PAN Card</option><option>Passport</option>
+            <option>Driving License</option><option>Voter ID</option><option>Other</option>
+          </select>
+        </label>
+        <label><span>ID Proof Number *</span><input id="wi_idnum" value="${esc(c.id_proof||'')}" placeholder="ID number" /></label>
+        <label><span>Guests</span><select id="wi_guests">${[1,2,3,4,5,6].map(n=>`<option ${n===1?'selected':''}>${n}</option>`).join('')}</select></label>
+        <label><span>Check-In Date *</span><input id="wi_in" type="date" min="${today}" value="${today}" /></label>
+        <label><span>Check-Out Date *</span><input id="wi_out" type="date" min="${today}" /></label>
+        <label class="full"><span>Room *</span>
+          <select id="wi_room">
+            <option value="">Select a room</option>
+            ${rms.filter(r => r.status === 'available').map(r => `<option value="${r.id}" data-price="${r.price}">${esc(r.number)} – ${esc(r.category)} (₹${r.price}/night)</option>`).join('')}
+          </select>
+        </label>
+        <div class="full"><strong>Total (auto-calculated):</strong> <span id="wi_total_disp" style="font-size:18px;color:var(--gold-2);">—</span> <small class="muted">nights × room price</small></div>
+        <label class="full"><span>ID Document(s) — Aadhar/PAN front & back</span>
+          <input type="file" id="wi_files" multiple accept="image/*,.pdf" />
+        </label>
+        <div class="full">
+          <button class="primary" id="wi_submit">Complete Check-In</button>
+          <span id="wi_msg" style="margin-left:12px;"></span>
+        </div>
+      </div>
+    `;
+    function recalc() {
+      const opt = $('wi_room').selectedOptions[0];
+      const price = opt ? parseFloat(opt.dataset.price || 0) : 0;
+      const ci = new Date($('wi_in').value), co = new Date($('wi_out').value);
+      if (ci && co && co > ci && price) {
+        const days = Math.max(1, Math.round((co - ci) / 86400000));
+        $('wi_total_disp').textContent = '₹' + (days * price).toLocaleString('en-IN') + ` (${days} night${days>1?'s':''})`;
+      } else { $('wi_total_disp').textContent = '—'; }
+    }
+    ['wi_room','wi_in','wi_out'].forEach(id => $(id).onchange = recalc);
+
+    $('wi_submit').onclick = async () => {
+      const name = $('wi_name').value.trim(), phone = $('wi_phone').value.trim();
+      const email = $('wi_email').value.trim(), room_id = $('wi_room').value;
+      const idnum = $('wi_idnum').value.trim();
+      const check_in = $('wi_in').value, check_out = $('wi_out').value;
+      if (!name || !phone || !room_id || !check_in || !check_out) return alert('Fill name, phone, room and dates');
+      if (!idnum) return alert('ID Proof Number is required');
+
+      $('wi_submit').disabled = true;
+      $('wi_msg').textContent = 'Processing...';
+
+      // 1. Create or update customer (id_proof number is mandatory)
+      let custId = c.id;
+      if (!custId) {
+        const fd = new FormData();
+        fd.append('name', name); fd.append('contact', phone); fd.append('email', email); fd.append('id_proof', idnum);
+        const cr = await fetch('/api/customers', { method: 'POST', body: fd });
+        const cj = await cr.json();
+        if (!cr.ok) { $('wi_msg').innerHTML = '<span style="color:#dc2626;">'+(cj.error||'Failed to add customer')+'</span>'; $('wi_submit').disabled=false; return; }
+        custId = cj.id;
+      } else {
+        const fd = new FormData();
+        fd.append('name', name); fd.append('contact', phone); fd.append('email', email); fd.append('id_proof', idnum);
+        await fetch('/api/customers/' + custId, { method: 'PUT', body: fd });
+      }
+
+      // 2. Create booking — total is computed server-side
+      const br = await fetch('/api/bookings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ customer_id: custId, room_id, check_in, check_out, guests: parseInt($('wi_guests').value)||1 }) });
+      const bj = await br.json();
+      if (!br.ok) { $('wi_msg').innerHTML = '<span style="color:#dc2626;">'+(bj.error||'Booking failed')+'</span>'; $('wi_submit').disabled=false; return; }
+
+      // 3. Upload documents (if any) and mark checked-in
+      const files = $('wi_files').files;
+      if (files.length) {
+        const fd = new FormData();
+        fd.append('doc_type', $('wi_idtype').value);
+        fd.append('guest_index', '0');
+        fd.append('guest_name', name);
+        for (const f of files) fd.append('documents', f);
+        await fetch(`/api/bookings/${bj.id}/documents`, { method: 'POST', body: fd });
+      }
+      await fetch(`/api/bookings/${bj.id}/status`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'checked_in' }) });
+
+      $('wi_msg').innerHTML = '<span style="color:#16a34a;">✓ Checked in successfully (Booking #' + bj.id + ')</span>';
+      setTimeout(() => walkin(), 1400);
+    };
+  }
+}
+
+// ---------- Visitors ----------
+async function visitors() {
+  const vs = await api('/api/visitors');
+  const identified = vs.filter(v => v.name || v.email || v.phone);
+  const anon = vs.filter(v => !v.name && !v.email && !v.phone);
+  const totalVisits = vs.reduce((s,v) => s + (v.total_visits || 0), 0);
+  const returning = vs.filter(v => (v.total_visits || 0) > 1).length;
+
+  $('panel').innerHTML = `
+    <h2>Live Visitor Tracking</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:18px;">Every visitor to your website is tracked. Identified guests (those who submitted a booking request) show their name/phone/email.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;">
+      <div class="stat"><h4>${vs.length}</h4><p>Unique Visitors</p></div>
+      <div class="stat"><h4>${totalVisits}</h4><p>Total Page Views</p></div>
+      <div class="stat"><h4>${identified.length}</h4><p>Identified Visitors</p></div>
+      <div class="stat"><h4>${returning}</h4><p>Returning Visitors</p></div>
+    </div>
+    <h3>Identified Visitors (${identified.length})</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Visits</th><th>First Seen</th><th>Last Seen</th><th>Customer?</th><th>Actions</th></tr></thead>
+      <tbody>${identified.map(v => `
+        <tr>
+          <td><strong>${esc(v.name||'-')}</strong></td>
+          <td>${esc(v.phone||'-')}</td>
+          <td>${esc(v.email||'-')}</td>
+          <td><span class="badge ${v.total_visits>1?'occupied':'available'}">${v.total_visits||1}×</span></td>
+          <td>${(v.first_seen||'').slice(0,16).replace('T',' ')}</td>
+          <td>${(v.last_seen||'').slice(0,16).replace('T',' ')}</td>
+          <td>${v.customer_id ? '<span style="color:#16a34a;">✓ Customer #'+v.customer_id+'</span>' : '<span class="muted">Lead</span>'}</td>
+          <td>
+            <button class="ghost" data-vh="${v.visitor_id}">History</button>
+            <button class="danger" data-vd="${v.visitor_id}">×</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:24px;">No identified visitors yet</td></tr>'}
+      </tbody>
+    </table>
+    <h3 style="margin-top:30px;">Anonymous Visitors (${anon.length})</h3>
+    <table>
+      <thead><tr><th>Visitor ID</th><th>Visits</th><th>First</th><th>Last</th><th>IP</th><th>Browser</th><th>Actions</th></tr></thead>
+      <tbody>${anon.slice(0,50).map(v => `
+        <tr>
+          <td><code style="font-size:11px;">${esc(v.visitor_id.slice(0,16))}…</code></td>
+          <td><span class="badge ${v.total_visits>1?'occupied':'available'}">${v.total_visits||1}×</span></td>
+          <td>${(v.first_seen||'').slice(0,16).replace('T',' ')}</td>
+          <td>${(v.last_seen||'').slice(0,16).replace('T',' ')}</td>
+          <td><small>${esc((v.ip||'').slice(0,30))}</small></td>
+          <td><small>${esc((v.user_agent||'').slice(0,40))}</small></td>
+          <td>
+            <button class="ghost" data-vh="${v.visitor_id}">History</button>
+            <button class="danger" data-vd="${v.visitor_id}">×</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px;">No anonymous visitors yet</td></tr>'}
+      </tbody>
+    </table>
+  `;
+  document.querySelectorAll('[data-vh]').forEach(b => b.onclick = async () => {
+    const r = await api('/api/visitors/' + b.dataset.vh + '/history');
+    showModal(`
+      <h3 style="margin:0 0 6px;">Visit History</h3>
+      <p class="muted" style="margin:0 0 14px;">${esc(r.visitor.name||'Anonymous')} · ${esc(r.visitor.phone||'')} · ${esc(r.visitor.email||'')}</p>
+      <div style="max-height:400px;overflow-y:auto;">
+        ${r.visits.map(v => `<div style="padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;">
+          <strong>${(v.visited_at||'').slice(0,19).replace('T',' ')}</strong> — ${esc(v.path)}
+          ${v.referrer ? `<br><small class="muted">from: ${esc(v.referrer.slice(0,80))}</small>` : ''}
+        </div>`).join('') || '<p class="muted">No visits recorded.</p>'}
+      </div>
+    `);
+  });
+  document.querySelectorAll('[data-vd]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this visitor and their history?')) return;
+    await fetch('/api/visitors/' + b.dataset.vd, { method: 'DELETE' });
+    visitors();
+  });
+}
+
+// ---------- Modal helper ----------
+function showModal(html, opts = {}) {
+  const maxWidth = opts.maxWidth || 560;
+  let m = document.getElementById('adminModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'adminModal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto;backdrop-filter:blur(4px);';
+    m.onclick = (e) => { if (e.target === m) closeModal(); };
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `<div class="admin-modal-card" style="background:white;max-width:${maxWidth}px;width:100%;padding:30px;border-radius:8px;box-shadow:0 30px 80px rgba(0,0,0,0.35);position:relative;max-height:90vh;overflow-y:auto;animation:modal-pop 0.34s cubic-bezier(0.18, 1.25, 0.4, 1.05);">
+    <button onclick="closeModal()" style="position:absolute;top:8px;right:14px;background:none;border:none;font-size:26px;cursor:pointer;color:#6b7280;line-height:1;transition:color 0.18s, transform 0.18s;" onmouseover="this.style.color='#dc2626';this.style.transform='rotate(90deg)';" onmouseout="this.style.color='#6b7280';this.style.transform='rotate(0)';">&times;</button>
+    ${html}
+  </div>`;
+  m.style.display = 'flex';
+  m.style.animation = 'overlay-fade 0.22s ease-out';
+}
+function closeModal() {
+  const m = document.getElementById('adminModal');
+  if (m) m.style.display = 'none';
+}
+
+// ---------- Dashboard ----------
+async function dashboard() {
+  const d = await api('/api/dashboard');
+  const inr = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  $('panel').innerHTML = `
+    <h2 style="margin-bottom:6px;">Business Dashboard</h2>
+    <p class="muted" style="margin:0 0 22px;">Live at-a-glance view of operations · ${new Date().toLocaleString('en-IN', { dateStyle:'full', timeStyle:'short' })}</p>
+
+    <h3 style="margin:0 0 10px;color:#1a3a5c;">Today's Operations</h3>
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat" style="border-left-color:#16a34a;cursor:pointer;" id="dCi"><div class="label">Today's Check-Ins</div><div class="value">${d.today.check_ins.length}</div></div>
+      <div class="stat" style="border-left-color:#dc2626;cursor:pointer;" id="dCo"><div class="label">Today's Check-Outs</div><div class="value">${d.today.check_outs.length}</div></div>
+      <div class="stat" style="border-left-color:#3b82f6;cursor:pointer;" id="dIn"><div class="label">In-House Guests</div><div class="value">${d.in_house.length}</div></div>
+      <div class="stat" style="border-left-color:#c9a96e;"><div class="label">Collected Today</div><div class="value">${inr(d.today.collected)}</div></div>
+    </div>
+
+    <h3 style="margin:0 0 10px;color:#1a3a5c;">Revenue & Dues</h3>
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat"><div class="label">Today</div><div class="value">${inr(d.revenue.today)}</div></div>
+      <div class="stat"><div class="label">Last 7 Days</div><div class="value">${inr(d.revenue.week)}</div></div>
+      <div class="stat"><div class="label">This Month</div><div class="value">${inr(d.revenue.month)}</div></div>
+      <div class="stat" style="border-left-color:${d.revenue.pending_dues>0?'#dc2626':'#16a34a'};"><div class="label">Pending Dues</div><div class="value">${inr(d.revenue.pending_dues)}</div></div>
+    </div>
+
+    <h3 style="margin:0 0 10px;color:#1a3a5c;">Rooms (${d.rooms.occupancy}% occupancy)</h3>
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat"><div class="label">Total Rooms</div><div class="value">${d.rooms.total}</div></div>
+      <div class="stat" style="border-left-color:#16a34a;"><div class="label">Available</div><div class="value">${d.rooms.available}</div></div>
+      <div class="stat" style="border-left-color:#f59e0b;"><div class="label">Booked</div><div class="value">${d.rooms.booked}</div></div>
+      <div class="stat" style="border-left-color:#dc2626;"><div class="label">Occupied</div><div class="value">${d.rooms.occupied}</div></div>
+    </div>
+
+    <h3 style="margin:0 0 10px;color:#1a3a5c;">Activity</h3>
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat" style="cursor:pointer;border-left-color:${d.counts.pending_requests?'#dc2626':'#c9a96e'};" id="dReq"><div class="label">Pending Requests</div><div class="value">${d.counts.pending_requests}</div></div>
+      <div class="stat"><div class="label">Total Customers</div><div class="value">${d.counts.customers}</div></div>
+      <div class="stat" style="cursor:pointer;" id="dVis"><div class="label">Visitors Today</div><div class="value">${d.counts.visitors_today}</div></div>
+      <div class="stat" style="cursor:pointer;" id="dVisW"><div class="label">Visitors / Week</div><div class="value">${d.counts.visitors_week}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+      <div class="card-block">
+        <h4 style="margin:0 0 12px;">📥 Today's Check-Ins</h4>
+        ${d.today.check_ins.length ? `<table style="font-size:13px;"><thead><tr><th>Guest</th><th>Room</th><th>Total</th><th>Paid</th></tr></thead><tbody>
+          ${d.today.check_ins.map(b => `<tr><td>${esc(b.name)}<br><small class="muted">${esc(b.contact||'')}</small></td><td>${esc(b.room)} (${esc(b.category)})</td><td>${inr(b.total)}</td><td>${inr(b.paid)}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No check-ins scheduled today.</p>'}
+      </div>
+      <div class="card-block">
+        <h4 style="margin:0 0 12px;">📤 Today's Check-Outs</h4>
+        ${d.today.check_outs.length ? `<table style="font-size:13px;"><thead><tr><th>Guest</th><th>Room</th><th>Pending</th></tr></thead><tbody>
+          ${d.today.check_outs.map(b => `<tr><td>${esc(b.name)}<br><small class="muted">${esc(b.contact||'')}</small></td><td>${esc(b.room)}</td><td><strong style="color:${b.pending>0?'#dc2626':'#16a34a'};">${inr(b.pending)}</strong></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No check-outs today.</p>'}
+      </div>
+      <div class="card-block" style="grid-column:1/-1;">
+        <h4 style="margin:0 0 12px;">🏨 Currently In-House (${d.in_house.length})</h4>
+        ${d.in_house.length ? `<table style="font-size:13px;"><thead><tr><th>Guest</th><th>Phone</th><th>Room</th><th>Check-Out</th></tr></thead><tbody>
+          ${d.in_house.map(b => `<tr><td>${esc(b.name)}</td><td>${esc(b.contact||'')}</td><td>${esc(b.room)} (${esc(b.category)})</td><td>${b.check_out}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No guests in-house right now.</p>'}
+      </div>
+    </div>`;
+  $('dReq').onclick = () => { currentTab = 'requests'; renderApp(); };
+  $('dVis').onclick = $('dVisW').onclick = () => { currentTab = 'visitors'; renderApp(); };
+  $('dCi').onclick = $('dCo').onclick = $('dIn').onclick = () => { currentTab = 'bookings'; renderApp(); };
+}
+
+// ---------- Site Content ----------
+async function content() {
+  const c = await api('/api/content');
+  const textFields = [
+    ['hotel_name','Hotel Name','full'],
+    ['tagline','Tagline','full'],
+    ['about','About Section (long text)','full','textarea'],
+    ['dining_text','Dining Section Text','full','textarea'],
+    ['amenities','Amenities (comma separated)','full','textarea'],
+    ['phone','Primary Phone',''],
+    ['phone2','Secondary Phone',''],
+    ['email','Email',''],
+    ['address','Address','full']
+  ];
+  $('panel').innerHTML = `
+    <h2>Edit Site Content</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:20px;">Change the text and images shown on your public website. Saves instantly.</p>
+    <div class="form-grid">
+      ${textFields.map(([k,label,full,type]) =>
+        `<label class="${full}"><span>${label}</span>${type==='textarea'
+          ? `<textarea id="f_${k}" rows="3">${esc(c[k]||'')}</textarea>`
+          : `<input id="f_${k}" value="${esc(c[k]||'')}" />`}</label>`).join('')}
+      <div class="full"><button class="primary" id="saveText">Save Text Content</button></div>
+    </div>
+
+    <h2 style="margin-top:30px;">Site Images</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:12px;">Upload an image OR paste a public image URL (Google Drive share, Dropbox link, or any direct image link).</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;">
+      ${[['hero_image','Hero Background'],['about_image','About Section'],['dining_image','Dining Section']].map(([k,label]) => `
+        <div class="form-grid" style="margin:0;">
+          <div class="full" style="font-weight:700;color:var(--dark);text-transform:uppercase;font-size:12px;letter-spacing:1px;">${label}</div>
+          ${c[k] ? `<div class="full"><img class="preview-img" src="${c[k]}" onerror="this.style.opacity=0.3;this.title='Failed to load — check the URL'" /></div>` : '<div class="full muted" style="font-style:italic;">No image yet</div>'}
+          <label class="full"><span>Upload new image</span><input type="file" id="file_${k}" accept="image/*" /></label>
+          <label class="full"><span>… or paste image URL</span><input id="url_${k}" placeholder="https://drive.google.com/file/d/..." value="${esc(c[k]||'')}" /></label>
+          <div class="full"><button class="primary" data-up="${k}">Save Image</button></div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  $('saveText').onclick = async () => {
+    const body = {};
+    textFields.forEach(([k]) => body[k] = $('f_'+k).value);
+    await api('/api/content', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    alert('Text content saved!');
+    content();
+  };
+  document.querySelectorAll('[data-up]').forEach(btn => btn.onclick = async () => {
+    const key = btn.dataset.up;
+    const f = $('file_'+key).files[0];
+    const url = $('url_'+key).value.trim();
+    if (!f && !url) return alert('Choose a file or paste an image URL');
+    const fd = new FormData();
+    fd.append('key', key);
+    if (f) fd.append('image', f);
+    if (url) fd.append('url', url);
+    const r = await fetch('/api/content/image', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (r.ok) { alert('Image saved!'); content(); }
+    else alert(j.error || 'Save failed');
+  });
+
+  // ----- Admin / Email / Storage settings -----
+  const settingsHtml = `
+    <h2 style="margin-top:30px;">Email & Notification Settings</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:16px;">Just enter your hotel email + password — SMTP host & port will be auto-detected for Gmail, Outlook, Yahoo, Zoho, iCloud, Office365, etc. Use an "App Password" for Gmail / Outlook (not your regular password).</p>
+    <div class="form-grid">
+      <label class="full"><span>Admin Email (also CC'd on every confirmation)</span><input id="s_admin_email" value="${esc(c.admin_email||'')}" placeholder="you@example.com" /></label>
+      <label><span>SMTP Username (your email)</span><input id="s_smtp_user" value="${esc(c.smtp_user||'')}" placeholder="you@gmail.com" /></label>
+      <label><span>SMTP Password / App Password</span><input id="s_smtp_pass" type="password" value="${esc(c.smtp_pass||'')}" placeholder="••••••••" /></label>
+      <label><span>SMTP Host (auto-detected)</span><input id="s_smtp_host" value="${esc(c.smtp_host||'')}" placeholder="smtp.gmail.com" /></label>
+      <label><span>SMTP Port (auto-detected)</span><input id="s_smtp_port" value="${esc(c.smtp_port||'587')}" placeholder="587" /></label>
+      <label><span>From Name (sender display)</span><input id="s_smtp_from_name" value="${esc(c.smtp_from_name||'The Dream Residency')}" /></label>
+      <div class="full"><button class="primary" id="saveSettings">Save Email Settings</button>
+        <button class="ghost" id="testEmail" style="margin-left:8px;">Send Test Email</button>
+        <span id="emailMsg" style="margin-left:12px;"></span></div>
+      <div class="full muted" style="font-style:italic;">Detected providers: Gmail, Outlook/Hotmail/Live, Yahoo, Zoho, iCloud, Office365.</div>
+    </div>
+
+    <h2 style="margin-top:30px;">Document Storage</h2>
+    <div class="form-grid">
+      <label class="full"><span>Folder where uploaded customer ID documents (Aadhar/etc.) are stored</span>
+        <input id="s_document_storage_path" value="${esc(c.document_storage_path||'./uploads/customer_documents')}" />
+      </label>
+      <label><span>Default Check-In Time (24h, e.g. 11:00)</span><input id="s_default_checkin_time" value="${esc(c.default_checkin_time||'11:00')}" /></label>
+      <div class="full muted" style="font-style:italic;">Use a path inside the project (e.g. <code>./uploads/customer_documents</code>) or an absolute path. Folder is created automatically.</div>
+      <div class="full"><button class="primary" id="saveStorage">Save Storage Settings</button></div>
+    </div>
+  `;
+  $('panel').insertAdjacentHTML('beforeend', settingsHtml);
+
+  $('saveSettings').onclick = async () => {
+    const body = {};
+    ['admin_email','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name'].forEach(k => body[k] = $('s_'+k).value);
+    const r = await fetch('/api/content', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    alert('Email settings saved!' + (j.smtp_detected ? '\n(SMTP host & port auto-filled from your email domain.)' : ''));
+    content();
+  };
+  $('saveStorage').onclick = async () => {
+    const body = { document_storage_path: $('s_document_storage_path').value, default_checkin_time: $('s_default_checkin_time').value };
+    await api('/api/content', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    alert('Storage settings saved!');
+  };
+  $('testEmail').onclick = async () => {
+    $('emailMsg').textContent = 'Sending…';
+    const r = await fetch('/api/test-email', { method: 'POST' });
+    const j = await r.json();
+    $('emailMsg').innerHTML = r.ok
+      ? '<span style="color:#16a34a;">✓ Sent! Check your inbox.</span>'
+      : `<span style="color:#dc2626;">✗ ${j.error || 'Failed'}</span>`;
+  };
+}
+
+// ---------- Rooms ----------
+async function rooms() {
+  const [rms, types] = await Promise.all([api('/api/rooms'), api('/api/room-types')]);
+  const catOpts = types.map(t => `<option value="${esc(t.category)}">${esc(t.name)}</option>`).join('');
+  $('panel').innerHTML = `
+    <h2>Room Management</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:16px;">Each physical room belongs to one of the 3 categories (Suite / Deluxe / Twin Bed). Edit category descriptions & images on the <strong>Room Types</strong> tab.</p>
+    <div class="form-grid">
+      <label><span>Room Number *</span><input id="r_num" placeholder="e.g. 101" /></label>
+      <label><span>Category *</span><select id="r_cat">${catOpts}</select></label>
+      <label><span>Price (₹ per night) *</span><input id="r_price" type="number" /></label>
+      <label><span>Status</span>
+        <select id="r_stat"><option value="available">Available</option><option value="booked">Booked</option><option value="occupied">Occupied</option></select>
+      </label>
+      <label class="full"><span>Description (room-specific notes, optional)</span><input id="r_desc" placeholder="e.g. Floor 2, garden view" /></label>
+      <div class="full"><button class="primary" id="addRoom">+ Add Room</button></div>
+    </div>
+    <table>
+      <thead><tr><th>Number</th><th>Category</th><th>Price</th><th>Status</th><th>Description</th><th>Actions</th></tr></thead>
+      <tbody>${rms.map(r => `
+        <tr>
+          <td><strong>${esc(r.number)}</strong></td><td>${esc(r.category)}</td><td>₹${r.price}</td>
+          <td><span class="badge ${r.status}">${r.status}</span></td>
+          <td>${esc(r.description||'')}</td>
+          <td>
+            <button class="ghost" data-edit='${JSON.stringify(r).replace(/'/g,"&#39;")}' style="font-size:12px;padding:6px 10px;">✎ Edit</button>
+            <button class="danger" data-del="${r.id}" style="font-size:12px;padding:6px 10px;">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center;">No rooms yet</td></tr>'}
+      </tbody>
+    </table>`;
+  $('addRoom').onclick = async () => {
+    const body = { number: $('r_num').value.trim(), category: $('r_cat').value, price: parseFloat($('r_price').value), status: $('r_stat').value, description: $('r_desc').value.trim() };
+    if (!body.number || !body.category || !body.price) return alert('Fill room number, category and price');
+    const r = await fetch('/api/rooms', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (r.ok) rooms(); else alert('Failed (room number must be unique)');
+  };
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this room? This will fail if it has bookings — change its status instead if needed.')) return;
+    const r = await fetch('/api/rooms/' + b.dataset.del, { method: 'DELETE' });
+    if (!r.ok) { const j = await r.json(); alert(j.error || 'Failed to delete'); }
+    rooms();
+  });
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
+    const r = JSON.parse(b.dataset.edit);
+    showModal(`
+      <h3 style="margin:0 0 14px;">Edit Room ${esc(r.number)}</h3>
+      <div class="form-grid" style="margin:0;">
+        <label><span>Room Number *</span><input id="er_num" value="${esc(r.number)}" /></label>
+        <label><span>Category *</span><select id="er_cat">${catOpts}</select></label>
+        <label><span>Price (₹) *</span><input id="er_price" type="number" value="${r.price}" /></label>
+        <label><span>Status</span>
+          <select id="er_stat">
+            <option value="available" ${r.status==='available'?'selected':''}>Available</option>
+            <option value="booked" ${r.status==='booked'?'selected':''}>Booked</option>
+            <option value="occupied" ${r.status==='occupied'?'selected':''}>Occupied</option>
+          </select>
+        </label>
+        <label class="full"><span>Description</span><input id="er_desc" value="${esc(r.description||'')}" /></label>
+        <div class="full" style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+          <button class="ghost" onclick="closeModal()">Cancel</button>
+          <button class="primary" id="er_save">Save Changes</button>
+        </div>
+        <div class="full" id="er_msg"></div>
+      </div>
+    `);
+    $('er_cat').value = r.category;
+    $('er_save').onclick = async () => {
+      const body = { number: $('er_num').value.trim(), category: $('er_cat').value, price: parseFloat($('er_price').value), status: $('er_stat').value, description: $('er_desc').value.trim() };
+      const rr = await fetch('/api/rooms/' + r.id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const j = await rr.json();
+      if (rr.ok) { closeModal(); rooms(); } else $('er_msg').innerHTML = '<div style="color:#dc2626;">'+(j.error||'Failed')+'</div>';
+    };
+  });
+}
+
+// ---------- Room Types (3 fixed: Suite / Deluxe / Twin Bed) ----------
+async function roomtypes() {
+  const types = await api('/api/room-types');
+  $('panel').innerHTML = `
+    <h2>Room Type Showcase</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:18px;">These three categories appear on your homepage. Update images, descriptions and features below — prices are NOT shown to guests.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;">
+      ${types.map(t => `
+        <div class="rt-card">
+          <div class="rt-img">
+            ${t.image ? `<img src="${t.image}" onerror="this.style.opacity=0.3"/>` : '<div class="muted" style="padding:50px 0;text-align:center;">No image</div>'}
+          </div>
+          <div class="rt-body">
+            <input class="rt-name" id="rt_name_${t.category}" value="${esc(t.name)}" />
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">Short tagline</label>
+            <input id="rt_short_${t.category}" value="${esc(t.short_desc||'')}" placeholder="One-line description shown on the card" />
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-top:8px;">Full description (Read More modal)</label>
+            <textarea id="rt_desc_${t.category}" rows="4">${esc(t.description||'')}</textarea>
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-top:8px;">Features (one per line)</label>
+            <textarea id="rt_feat_${t.category}" rows="4" placeholder="King bed&#10;City view&#10;Free Wi-Fi">${esc((t.features||[]).join('\n'))}</textarea>
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-top:8px;">Internal price (₹/night, used for booking total)</label>
+            <input id="rt_price_${t.category}" type="number" value="${t.price||0}" />
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="primary" data-savetype="${t.category}">Save Text & Price</button>
+            </div>
+            <hr style="margin:14px 0;border:0;border-top:1px dashed #e5e0d2;" />
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">Image — upload OR paste URL</label>
+            <input type="file" id="rt_file_${t.category}" accept="image/*" style="margin-top:6px;" />
+            <input id="rt_url_${t.category}" placeholder="https://drive.google.com/file/d/..." value="${esc(t.image||'')}" style="margin-top:6px;" />
+            <button class="ghost" data-saveimg="${t.category}" style="margin-top:8px;">Save Image</button>
+            <span id="rt_msg_${t.category}" style="margin-left:8px;font-size:12px;"></span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.querySelectorAll('[data-savetype]').forEach(b => b.onclick = async () => {
+    const cat = b.dataset.savetype;
+    const body = {
+      name: $('rt_name_'+cat).value.trim(),
+      short_desc: $('rt_short_'+cat).value.trim(),
+      description: $('rt_desc_'+cat).value.trim(),
+      features: $('rt_feat_'+cat).value.split('\n').map(s => s.trim()).filter(Boolean),
+      price: parseFloat($('rt_price_'+cat).value)||0
+    };
+    const r = await fetch('/api/room-types/' + cat, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    $('rt_msg_'+cat).innerHTML = r.ok ? '<span style="color:#16a34a;">✓ Saved</span>' : '<span style="color:#dc2626;">Failed</span>';
+    setTimeout(() => $('rt_msg_'+cat).innerHTML='', 1800);
+  });
+  document.querySelectorAll('[data-saveimg]').forEach(b => b.onclick = async () => {
+    const cat = b.dataset.saveimg;
+    const f = $('rt_file_'+cat).files[0];
+    const url = $('rt_url_'+cat).value.trim();
+    if (!f && !url) return alert('Choose a file or paste a URL');
+    const fd = new FormData();
+    if (f) fd.append('image', f);
+    if (url) fd.append('url', url);
+    const r = await fetch('/api/room-types/' + cat + '/image', { method: 'POST', body: fd });
+    if (r.ok) roomtypes(); else { const j = await r.json(); alert(j.error||'Failed'); }
+  });
+}
+
+// ---------- Customers (edit-only, no delete) ----------
+async function customers() {
+  const cust = await api('/api/customers');
+  $('panel').innerHTML = `
+    <h2>Customer Management</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:16px;">ID Proof number is mandatory for every guest. Customers cannot be deleted (booking history is preserved) — use Edit to update their details.</p>
+    <div class="form-grid">
+      <label><span>Name *</span><input id="c_name" /></label>
+      <label><span>Contact *</span><input id="c_contact" placeholder="Phone with country code" /></label>
+      <label><span>Email</span><input id="c_email" type="email" /></label>
+      <label><span>ID Proof Number *</span><input id="c_idp" placeholder="Aadhar / Passport / etc." /></label>
+      <label class="full"><span>Upload ID Document (image/PDF, optional)</span><input id="c_doc" type="file" accept="image/*,.pdf" /></label>
+      <div class="full"><button class="primary" id="addCust">+ Add Customer</button> <span id="addCustMsg" style="margin-left:10px;"></span></div>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Name</th><th>Contact</th><th>Email</th><th>ID Proof *</th><th>Document</th><th>Actions</th></tr></thead>
+      <tbody>${cust.map(c => `
+        <tr>
+          <td>${c.id}</td>
+          <td><strong>${esc(c.name)}</strong></td>
+          <td>${esc(c.contact||'')}</td>
+          <td>${esc(c.email||'')}</td>
+          <td>${c.id_proof ? esc(c.id_proof) : '<span style="color:#dc2626;">⚠ missing</span>'}</td>
+          <td>${c.document ? `<a href="${c.document}" target="_blank">View</a>` : '—'}</td>
+          <td>
+            <button class="ghost" data-hist="${c.id}" style="font-size:12px;padding:6px 10px;">📜 History</button>
+            <button class="primary" data-edit='${JSON.stringify(c).replace(/'/g,"&#39;")}' style="font-size:12px;padding:6px 10px;">✎ Edit</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;">No customers yet</td></tr>'}
+      </tbody>
+    </table>`;
+  $('addCust').onclick = async () => {
+    if (!$('c_name').value.trim()) return alert('Name required');
+    if (!$('c_contact').value.trim()) return alert('Contact required');
+    if (!$('c_idp').value.trim()) return alert('ID Proof Number is mandatory');
+    const fd = new FormData();
+    fd.append('name', $('c_name').value.trim());
+    fd.append('contact', $('c_contact').value.trim());
+    fd.append('email', $('c_email').value.trim());
+    fd.append('id_proof', $('c_idp').value.trim());
+    if ($('c_doc').files[0]) fd.append('document', $('c_doc').files[0]);
+    const r = await fetch('/api/customers', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (r.ok) customers();
+    else $('addCustMsg').innerHTML = '<span style="color:#dc2626;">'+(j.error||'Failed')+'</span>';
+  };
+  document.querySelectorAll('[data-hist]').forEach(b => b.onclick = () => viewCustomerHistory(b.dataset.hist));
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
+    const c = JSON.parse(b.dataset.edit);
+    showModal(`
+      <h3 style="margin:0 0 14px;">Edit Customer #${c.id}</h3>
+      <div class="form-grid" style="margin:0;">
+        <label><span>Name *</span><input id="ec_name" value="${esc(c.name)}" /></label>
+        <label><span>Contact *</span><input id="ec_contact" value="${esc(c.contact||'')}" /></label>
+        <label><span>Email</span><input id="ec_email" value="${esc(c.email||'')}" /></label>
+        <label><span>ID Proof Number *</span><input id="ec_idp" value="${esc(c.id_proof||'')}" /></label>
+        <label class="full"><span>Replace ID Document (optional)</span><input type="file" id="ec_doc" accept="image/*,.pdf" /></label>
+        ${c.document ? `<div class="full muted" style="font-size:12px;">Current: <a href="${c.document}" target="_blank">View existing</a></div>` : ''}
+        <div class="full" style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+          <button class="ghost" onclick="closeModal()">Cancel</button>
+          <button class="primary" id="ec_save">Save Changes</button>
+        </div>
+        <div class="full" id="ec_msg"></div>
+      </div>
+    `);
+    $('ec_save').onclick = async () => {
+      if (!$('ec_idp').value.trim()) { $('ec_msg').innerHTML='<div style="color:#dc2626;">ID Proof is mandatory</div>'; return; }
+      const fd = new FormData();
+      fd.append('name', $('ec_name').value.trim());
+      fd.append('contact', $('ec_contact').value.trim());
+      fd.append('email', $('ec_email').value.trim());
+      fd.append('id_proof', $('ec_idp').value.trim());
+      if ($('ec_doc').files[0]) fd.append('document', $('ec_doc').files[0]);
+      const r = await fetch('/api/customers/' + c.id, { method: 'PUT', body: fd });
+      const j = await r.json();
+      if (r.ok) { closeModal(); customers(); }
+      else $('ec_msg').innerHTML = '<div style="color:#dc2626;">'+(j.error||'Failed')+'</div>';
+    };
+  });
+}
+
+// ---------- Bookings ----------
+async function bookings() {
+  const [bks, cust, rms, types, settings] = await Promise.all([
+    api('/api/bookings'), api('/api/customers'), api('/api/rooms'), api('/api/room-types'), api('/api/content')
+  ]);
+  const ciTime = settings.default_checkin_time || '11:00';
+  const today = new Date().toISOString().slice(0,10);
+  $('panel').innerHTML = `
+    <h2>Booking Management</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:14px;">Pick an existing customer OR add a new one inline. Total is auto-calculated from nights × room price (server-side, not editable).</p>
+    <div class="form-grid">
+      <label class="full"><span>Customer</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="b_cust" style="flex:1;"><option value="">— Select existing customer —</option>${cust.map(c => `<option value="${c.id}">${esc(c.name)} · ${esc(c.contact||'')}</option>`).join('')}</select>
+          <button class="ghost" id="b_toggleNew" type="button">+ New Customer</button>
+        </div>
+      </label>
+      <div class="full" id="b_newCustBox" style="display:none;background:#f9f7f1;padding:14px;border:1px dashed #d6c896;border-radius:6px;">
+        <strong style="display:block;margin-bottom:10px;">New customer details (will be created with this booking):</strong>
+        <div class="form-grid" style="margin:0;">
+          <label><span>Name *</span><input id="nc_name" /></label>
+          <label><span>Phone *</span><input id="nc_contact" /></label>
+          <label><span>Email</span><input id="nc_email" /></label>
+          <label><span>ID Proof Number *</span><input id="nc_idp" /></label>
+        </div>
+      </div>
+      <label><span>Check In *</span><input id="b_in" type="date" min="${today}" /></label>
+      <label><span>Check Out *</span><input id="b_out" type="date" min="${today}" /></label>
+      <label><span>Room *</span><select id="b_room"><option value="">Pick dates first</option></select></label>
+      <label><span>Guests</span><select id="b_guests">${[1,2,3,4,5,6].map(n=>`<option ${n===1?'selected':''}>${n}</option>`).join('')}</select></label>
+      <div class="full"><strong>Total (auto):</strong> <span id="b_total_disp" style="font-size:18px;color:var(--gold-2);">—</span> <small class="muted">nights × room price</small></div>
+      <div class="full"><button class="primary" id="addBk">Create Booking</button> <span id="addBkMsg" style="margin-left:10px;"></span></div>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Customer</th><th>Room</th><th>Stay</th><th>Guests</th><th>Total</th><th>Paid</th><th>Pending</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${bks.map(b => `
+        <tr>
+          <td>${b.id}</td>
+          <td><strong>${esc(b.customer_name)}</strong><br><small class="muted">${esc(b.customer_contact||'')}</small></td>
+          <td>${esc(b.room_number)}<br><small class="muted">${esc(b.room_category)}</small></td>
+          <td>${b.check_in} <small class="muted">${ciTime}</small><br>→ ${b.check_out}</td>
+          <td>${b.guests||1}${(b.guests_list && b.guests_list.length>1) ? `<br><button class="ghost" data-vg="${b.id}" style="font-size:11px;padding:3px 6px;margin-top:3px;">👥 ${b.guests_list.length} listed</button>` : ''}</td>
+          <td>₹${(b.total||0).toLocaleString('en-IN')}</td>
+          <td><strong style="color:#16a34a;">₹${(b.paid||0).toLocaleString('en-IN')}</strong></td>
+          <td><strong style="color:${b.pending>0?'#dc2626':'#9ca3af'};">₹${(b.pending||0).toLocaleString('en-IN')}</strong></td>
+          <td>
+            <span class="badge ${b.status}">${b.status.replace('_',' ')}</span>
+            <select data-status="${b.id}" style="font-size:11px;padding:4px;margin-top:6px;display:block;">
+              <option value="booked" ${b.status==='booked'?'selected':''}>Booked</option>
+              <option value="checked_in" ${b.status==='checked_in'?'selected':''}>Checked In</option>
+              <option value="checked_out" ${b.status==='checked_out'?'selected':''}>Checked Out</option>
+              <option value="cancelled" ${b.status==='cancelled'?'selected':''}>Cancelled</option>
+            </select>
+          </td>
+          <td>
+            <button class="primary" data-pay="${b.id}" style="font-size:12px;padding:6px 8px;">💰 Payments</button>
+            <button class="ok" data-checkin="${b.id}" style="font-size:12px;padding:6px 8px;margin-top:4px;display:block;">Check In / Docs</button>
+            <button class="danger" data-del="${b.id}" style="font-size:11px;padding:4px 8px;margin-top:4px;display:block;">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="10" class="muted" style="text-align:center;padding:30px;">No bookings yet</td></tr>'}
+      </tbody>
+    </table>`;
+
+  $('b_toggleNew').onclick = () => {
+    const box = $('b_newCustBox');
+    const showing = box.style.display !== 'none';
+    box.style.display = showing ? 'none' : 'block';
+    $('b_cust').disabled = !showing;
+    if (!showing) $('b_cust').value = '';
+  };
+
+  async function refreshRooms() {
+    const ci = $('b_in').value, co = $('b_out').value;
+    const url = ci && co ? `/api/availability?check_in=${ci}&check_out=${co}` : '/api/availability';
+    const avail = await fetch(url).then(r => r.json());
+    $('b_room').innerHTML = avail.length
+      ? '<option value="">Select…</option>' + avail.map(r => `<option value="${r.id}" data-price="${r.price}">${esc(r.number)} – ${esc(r.category)} (₹${r.price})</option>`).join('')
+      : '<option value="">No rooms available</option>';
+    autoTotal();
+  }
+  function autoTotal() {
+    const ci = new Date($('b_in').value), co = new Date($('b_out').value);
+    const opt = $('b_room').selectedOptions[0];
+    if (opt && opt.dataset.price && !isNaN(ci) && !isNaN(co) && co > ci) {
+      const days = Math.max(1, Math.round((co - ci) / 86400000));
+      $('b_total_disp').textContent = '₹' + (days * parseFloat(opt.dataset.price)).toLocaleString('en-IN') + ` (${days} night${days>1?'s':''})`;
+    } else $('b_total_disp').textContent = '—';
+  }
+  $('b_in').onchange = refreshRooms;
+  $('b_out').onchange = refreshRooms;
+  $('b_room').onchange = autoTotal;
+  refreshRooms();
+
+  $('addBk').onclick = async () => {
+    const usingNew = $('b_newCustBox').style.display !== 'none';
+    const body = {
+      room_id: $('b_room').value,
+      check_in: $('b_in').value,
+      check_out: $('b_out').value,
+      guests: parseInt($('b_guests').value)||1
+    };
+    if (!body.room_id || !body.check_in || !body.check_out) return alert('Fill room and dates');
+    if (usingNew) {
+      const name = $('nc_name').value.trim(), contact = $('nc_contact').value.trim(), idp = $('nc_idp').value.trim();
+      if (!name || !contact || !idp) return alert('Fill new customer name, phone and ID proof');
+      body.customer = { name, contact, email: $('nc_email').value.trim(), id_proof: idp };
+    } else {
+      if (!$('b_cust').value) return alert('Select a customer or add a new one');
+      body.customer_id = $('b_cust').value;
+    }
+    const r = await fetch('/api/bookings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (r.ok) bookings();
+    else $('addBkMsg').innerHTML = '<span style="color:#dc2626;">'+(j.error||'Failed')+'</span>';
+  };
+  document.querySelectorAll('[data-status]').forEach(s => s.onchange = async () => {
+    await fetch('/api/bookings/' + s.dataset.status + '/status', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: s.value }) });
+    bookings();
+  });
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this booking? Payments and documents linked to it will also be removed.')) return;
+    await fetch('/api/bookings/' + b.dataset.del, { method: 'DELETE' });
+    bookings();
+  });
+  document.querySelectorAll('[data-checkin]').forEach(b => b.onclick = () => openCheckInModal(bks.find(x => x.id == b.dataset.checkin)));
+  document.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => openPaymentsModal(bks.find(x => x.id == b.dataset.pay)));
+  document.querySelectorAll('[data-vg]').forEach(b => b.onclick = () => {
+    const bk = bks.find(x => x.id == b.dataset.vg);
+    showGuestsModal(bk.guests_list, `Booking #${bk.id} — ${bk.customer_name}`);
+  });
+}
+
+// ---------- Manual Booking ----------
+async function manualbooking() {
+  const types = await api('/api/room-types');
+  const today = new Date().toISOString().slice(0,10);
+  $('panel').innerHTML = `
+    <h2>Manual Booking</h2>
+    <p class="muted" style="margin-top:-12px;margin-bottom:20px;">Create a confirmed booking directly for walk-in guests or phone-call customers. Total is auto-calculated from room type price × nights (server-side).</p>
+    <div class="form-grid">
+      <label><span>Customer Name *</span><input id="mb_name" placeholder="Full name" /></label>
+      <label><span>Phone *</span><input id="mb_phone" placeholder="+91 98765 43210" /></label>
+      <label><span>Email</span><input type="email" id="mb_email" placeholder="customer@email.com" /></label>
+      <label><span>Address</span><input id="mb_address" placeholder="City / full address" /></label>
+      <label><span>ID Proof Number *</span><input id="mb_idproof" placeholder="Aadhar / Passport / etc." /></label>
+      <label><span>Guests</span><select id="mb_guests">${[1,2,3,4,5,6,7,8].map(n=>`<option ${n===1?'selected':''}>${n}</option>`).join('')}</select></label>
+      <label><span>Room Type *</span>
+        <select id="mb_type">
+          ${types.map(t => `<option value="${esc(t.slug)}" data-price="${t.price}">${esc(t.name)} — ₹${(t.price||0).toLocaleString('en-IN')}/night</option>`).join('')}
+        </select>
+      </label>
+      <label><span>Room Number *</span><input id="mb_room_num" placeholder="e.g. 101, 201..." /></label>
+      <label><span>Check-In Date *</span><input id="mb_in" type="date" min="${today}" value="${today}" /></label>
+      <label><span>Check-Out Date *</span><input id="mb_out" type="date" min="${today}" /></label>
+      <div class="full">
+        <strong>Estimated Total:</strong>
+        <span id="mb_total_disp" style="font-size:18px;color:var(--gold-2);margin-left:8px;">—</span>
+        <small class="muted"> (nights × room type price, server-side computed)</small>
+      </div>
+      <label><span>Advance Payment (₹)</span><input id="mb_pay_amt" type="number" placeholder="0" min="0" /></label>
+      <label><span>Payment Method</span>
+        <select id="mb_pay_method">
+          <option value="cash">💵 Cash</option>
+          <option value="gpay">📱 GPay</option>
+          <option value="phonepe">📱 PhonePe</option>
+          <option value="upi">📱 UPI</option>
+          <option value="card">💳 Card</option>
+          <option value="bank_transfer">🏦 Bank Transfer</option>
+        </select>
+      </label>
+      <label class="full"><span>Notes / Special Requests</span><textarea id="mb_notes" rows="2" placeholder="Any special requirements, room preferences..."></textarea></label>
+      <div class="full">
+        <button class="primary" id="mb_submit" style="padding:12px 30px;font-size:15px;">Create Confirmed Booking</button>
+        <span id="mb_msg" style="margin-left:14px;font-size:14px;"></span>
+      </div>
+    </div>`;
+
+  function recalcTotal() {
+    const opt = $('mb_type').selectedOptions[0];
+    const price = opt ? parseFloat(opt.dataset.price||0) : 0;
+    const ci = new Date($('mb_in').value), co = new Date($('mb_out').value);
+    if (price && !isNaN(ci) && !isNaN(co) && co > ci) {
+      const nights = Math.max(1, Math.round((co-ci)/86400000));
+      $('mb_total_disp').textContent = '₹' + (nights * price).toLocaleString('en-IN') + ` (${nights} night${nights>1?'s':''})`;
+    } else { $('mb_total_disp').textContent = '—'; }
+  }
+  ['mb_type','mb_in','mb_out'].forEach(id => $(id).onchange = recalcTotal);
+
+  $('mb_submit').onclick = async () => {
+    const name = $('mb_name').value.trim(), phone = $('mb_phone').value.trim();
+    const room_type = $('mb_type').value, room_number = $('mb_room_num').value.trim();
+    const check_in = $('mb_in').value, check_out = $('mb_out').value;
+    const id_proof = $('mb_idproof').value.trim();
+    if (!name || !phone || !room_type || !room_number || !check_in || !check_out)
+      return alert('Please fill: Name, Phone, Room Type, Room Number, and Dates');
+    if (!id_proof) return alert('ID Proof Number is required');
+    if (!check_out || check_out <= check_in) return alert('Check-out must be after check-in');
+
+    $('mb_submit').disabled = true;
+    $('mb_msg').textContent = 'Creating booking…';
+
+    const body = {
+      name, phone, email: $('mb_email').value.trim(), address: $('mb_address').value.trim(),
+      id_proof, guests: parseInt($('mb_guests').value)||1,
+      room_type, room_number, check_in, check_out,
+      notes: $('mb_notes').value.trim(),
+      payment_amount: parseFloat($('mb_pay_amt').value)||0,
+      payment_method: $('mb_pay_method').value
+    };
+
+    const r = await fetch('/api/manual-booking', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (r.ok) {
+      $('mb_msg').innerHTML = `<span style="color:#16a34a;">✓ Booking #${j.booking_id} created! Total: ₹${(j.total||0).toLocaleString('en-IN')}. <a href="#" onclick="currentTab='bookings';renderApp();">View in Bookings →</a></span>`;
+      $('mb_submit').disabled = false;
+      ['mb_name','mb_phone','mb_email','mb_address','mb_idproof','mb_room_num','mb_notes','mb_pay_amt'].forEach(id => $(id).value='');
+    } else {
+      $('mb_msg').innerHTML = `<span style="color:#dc2626;">${j.error || 'Failed to create booking'}</span>`;
+      $('mb_submit').disabled = false;
+    }
+  };
+}
+
+// ---------- Payments modal ----------
+async function openPaymentsModal(bk) {
+  const pmts = await api(`/api/bookings/${bk.id}/payments`);
+  const inr = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  const totalPaid = pmts.reduce((s,p) => s + (p.amount||0), 0);
+  const pending = (bk.total||0) - totalPaid;
+  showModal(`
+    <h3 style="margin:0 0 6px;">💰 Payment Manager · Booking #${bk.id}</h3>
+    <p class="muted" style="margin:0 0 16px;">${esc(bk.customer_name)} · Room ${esc(bk.room_number)} · ${bk.check_in} → ${bk.check_out}</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
+      <div style="background:#f9fafb;padding:14px;border-radius:6px;text-align:center;">
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Total</div>
+        <div style="font-size:22px;font-weight:600;margin-top:4px;">${inr(bk.total)}</div>
+      </div>
+      <div style="background:#dcfce7;padding:14px;border-radius:6px;text-align:center;">
+        <div style="font-size:11px;color:#166534;text-transform:uppercase;letter-spacing:1px;">Paid</div>
+        <div style="font-size:22px;font-weight:600;color:#16a34a;margin-top:4px;">${inr(totalPaid)}</div>
+      </div>
+      <div style="background:${pending>0?'#fee2e2':'#f3f4f6'};padding:14px;border-radius:6px;text-align:center;">
+        <div style="font-size:11px;color:${pending>0?'#991b1b':'#6b7280'};text-transform:uppercase;letter-spacing:1px;">Pending</div>
+        <div style="font-size:22px;font-weight:600;color:${pending>0?'#dc2626':'#16a34a'};margin-top:4px;">${inr(pending)}</div>
+      </div>
+    </div>
+
+    <div style="background:#f9fafb;padding:16px;border-radius:6px;margin-bottom:18px;">
+      <h4 style="margin:0 0 12px;">+ Record New Payment</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <label style="font-size:12px;">Amount<input id="p_amt" type="number" placeholder="0" value="${pending>0?pending:''}" style="width:100%;padding:8px;margin-top:4px;border:1px solid #ddd;border-radius:4px;" /></label>
+        <label style="font-size:12px;">Method
+          <select id="p_method" style="width:100%;padding:8px;margin-top:4px;border:1px solid #ddd;border-radius:4px;">
+            <option value="cash">💵 Cash</option>
+            <option value="gpay">📱 GPay</option>
+            <option value="phonepe">📱 PhonePe</option>
+            <option value="paytm">📱 Paytm</option>
+            <option value="upi">📱 UPI (other)</option>
+            <option value="card">💳 Card</option>
+            <option value="bank_transfer">🏦 Bank Transfer</option>
+            <option value="cheque">📝 Cheque</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label style="font-size:12px;">Type
+          <select id="p_type" style="width:100%;padding:8px;margin-top:4px;border:1px solid #ddd;border-radius:4px;">
+            <option value="advance">Advance</option>
+            <option value="full">Full Payment</option>
+            <option value="partial">Partial</option>
+            <option value="balance">Balance / Final</option>
+            <option value="refund">Refund</option>
+          </select>
+        </label>
+      </div>
+      <label style="font-size:12px;display:block;margin-top:8px;">Notes / Reference
+        <input id="p_notes" placeholder="Txn ID, ref number, etc." style="width:100%;padding:8px;margin-top:4px;border:1px solid #ddd;border-radius:4px;" />
+      </label>
+      <button class="primary" id="p_add" style="margin-top:12px;">Record Payment</button>
+      <span id="p_msg" style="margin-left:10px;"></span>
+    </div>
+
+    <h4 style="margin:0 0 10px;">Payment History (${pmts.length})</h4>
+    <table style="font-size:13px;">
+      <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Type</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${pmts.map(p => `
+        <tr>
+          <td>${(p.paid_at||'').slice(0,16).replace('T',' ')}</td>
+          <td><strong>${inr(p.amount)}</strong></td>
+          <td>${esc(p.method)}</td>
+          <td>${esc(p.type)}</td>
+          <td>${esc(p.notes||'')}</td>
+          <td><button class="danger" data-delp="${p.id}" style="font-size:11px;padding:4px 8px;">×</button></td>
+        </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center;padding:20px;">No payments recorded yet</td></tr>'}
+      </tbody>
+    </table>
+  `);
+  document.querySelectorAll('[data-delp]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this payment record?')) return;
+    await fetch('/api/payments/' + b.dataset.delp, { method: 'DELETE' });
+    openPaymentsModal(bk);
+  });
+  $('p_add').onclick = async () => {
+    const amount = parseFloat($('p_amt').value);
+    if (!amount || amount <= 0) return alert('Enter amount');
+    const r = await fetch(`/api/bookings/${bk.id}/payments`, { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ amount, method: $('p_method').value, type: $('p_type').value, notes: $('p_notes').value }) });
+    if (r.ok) { closeModal(); bookings(); }
+    else $('p_msg').innerHTML = '<span style="color:#dc2626;">Failed</span>';
+  };
+}
+
+// ---------- Check-In / Document upload modal (per-guest, multi-upload) ----------
+async function openCheckInModal(bk) {
+  const docs = await api(`/api/bookings/${bk.id}/documents`);
+  // Build the guest list — primary customer first, plus extra guests_list (skip the primary if duplicated)
+  const guests = [{ name: bk.customer_name, primary: true }];
+  if (bk.guests_list && bk.guests_list.length) {
+    bk.guests_list.forEach((g, i) => {
+      if (i === 0 && g.name === bk.customer_name) return; // dedupe primary
+      guests.push(g);
+    });
+  }
+  // Pad to match the booking's `guests` count if guests_list is shorter
+  const want = parseInt(bk.guests) || guests.length;
+  while (guests.length < want) guests.push({ name: 'Guest ' + (guests.length + 1) });
+
+  // Group existing docs by guest_index for the "already uploaded" badge
+  const docsByGuest = {};
+  docs.forEach(d => {
+    const k = d.guest_index ?? 0;
+    (docsByGuest[k] = docsByGuest[k] || []).push(d);
+  });
+
+  const idTypes = ['Aadhar Card','PAN Card','Passport','Driving License','Voter ID','Other ID Proof'];
+  const guestCardsHtml = guests.map((g, i) => {
+    const gName = g.name || ('Guest ' + (i + 1));
+    const existing = docsByGuest[i] || [];
+    return `
+      <div class="ci-guest-card ${existing.length?'is-uploaded':''}" data-guest-card="${i}">
+        <div class="ci-guest-head">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <span class="ci-guest-num">${i===0?'★ Primary':'Guest '+(i+1)}</span>
+            <span class="ci-guest-name">${esc(gName)}</span>
+          </div>
+          ${existing.length ? `<span class="ci-guest-existing">✓ ${existing.length} doc(s) on file</span>` : ''}
+        </div>
+        <div class="ci-guest-fields">
+          <label><span>Document Type</span>
+            <select class="ci-type">
+              ${idTypes.map(t => `<option ${i===0&&t==='Aadhar Card'?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </label>
+          <label><span>Upload File(s) — front & back, image or PDF (max 10MB each)</span>
+            <input type="file" class="ci-files" multiple accept="image/*,.pdf" />
+          </label>
+        </div>
+        <div class="ci-guest-status" data-status></div>
+      </div>`;
+  }).join('');
+
+  const existingDocsBlock = docs.length ? `
+    <div style="margin-top:18px;padding-top:14px;border-top:1px dashed #e5e7eb;">
+      <strong style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;">All Documents on File (${docs.length})</strong>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+        ${docs.map(d => `
+          <div style="display:flex;justify-content:space-between;padding:8px 10px;border:1px solid #eee;border-radius:4px;align-items:center;font-size:13px;background:#fafafa;">
+            <span><strong>${esc(d.doc_type||'Doc')}</strong> · ${esc(d.original_name||'')}
+              ${d.guest_name ? ` <small style="color:var(--gold-2);">— for ${esc(d.guest_name)}</small>` : ''}
+              <br><small class="muted">${(d.uploaded_at||'').slice(0,16).replace('T',' ')}</small></span>
+            <span style="white-space:nowrap;"><a href="/api/documents/${d.id}/download" class="ghost" style="text-decoration:none;padding:6px 10px;">Download</a>
+            <button class="danger" data-deldoc="${d.id}" style="margin-left:6px;">×</button></span>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  showModal(`
+    <h3 style="margin:0 0 6px;">Check-In · Booking #${bk.id}</h3>
+    <p class="muted" style="margin:0 0 18px;">${esc(bk.customer_name)} · Room ${esc(bk.room_number)} (${esc(bk.room_category)}) · ${bk.check_in} → ${bk.check_out} · <strong>${bk.guests||1} guest(s)</strong></p>
+    <p style="margin:0 0 14px;font-size:13px;color:#374151;background:#fff8e6;border-left:3px solid var(--gold);padding:10px 12px;border-radius:4px;">
+      📎 Upload an ID document for <strong>each guest</strong>. You can leave guests blank and upload later — only filled guest cards will be sent.
+    </p>
+    <div id="ci_guests_wrap">${guestCardsHtml}</div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+      <button class="primary" id="ci_upload">Upload All &amp; Mark Checked-In</button>
+      <button class="ghost" id="ci_uploadOnly">Upload Only</button>
+      <span id="ci_msg" style="margin-left:8px;"></span>
+    </div>
+
+    ${existingDocsBlock}
+  `, { maxWidth: 720 });
+
+  document.querySelectorAll('[data-deldoc]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this document?')) return;
+    await fetch('/api/documents/' + b.dataset.deldoc, { method: 'DELETE' });
+    openCheckInModal(bk);
+  });
+
+  async function doUpload(markCheckedIn) {
+    const cards = Array.from(document.querySelectorAll('[data-guest-card]'));
+    const cardsWithFiles = cards.filter(c => c.querySelector('.ci-files').files.length > 0);
+
+    if (!cardsWithFiles.length && !markCheckedIn) {
+      $('ci_msg').innerHTML = '<span style="color:#dc2626;">Choose at least one file to upload.</span>';
+      return;
+    }
+
+    let okCount = 0, failCount = 0;
+    for (const card of cardsWithFiles) {
+      const idx = parseInt(card.dataset.guestCard);
+      const files = card.querySelector('.ci-files').files;
+      const docType = card.querySelector('.ci-type').value;
+      const guestName = card.querySelector('.ci-guest-name').textContent.trim();
+      const status = card.querySelector('[data-status]');
+      status.className = 'ci-guest-status busy';
+      status.textContent = `Uploading ${files.length} file(s)…`;
+
+      const fd = new FormData();
+      fd.append('doc_type', docType);
+      fd.append('guest_index', String(idx));
+      fd.append('guest_name', guestName);
+      for (const f of files) fd.append('documents', f);
+
+      try {
+        const r = await fetch(`/api/bookings/${bk.id}/documents`, { method: 'POST', body: fd });
+        if (!r.ok) throw new Error('Upload failed');
+        status.className = 'ci-guest-status ok';
+        status.textContent = `✓ ${files.length} file(s) uploaded`;
+        card.classList.add('is-uploaded');
+        okCount++;
+      } catch (e) {
+        status.className = 'ci-guest-status err';
+        status.textContent = '✗ Upload failed — try again';
+        failCount++;
+      }
+    }
+
+    if (markCheckedIn && failCount === 0) {
+      await fetch(`/api/bookings/${bk.id}/status`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'checked_in' }) });
+    }
+
+    if (failCount > 0) {
+      $('ci_msg').innerHTML = `<span style="color:#dc2626;">${failCount} guest upload(s) failed. ${okCount} succeeded.</span>`;
+    } else {
+      $('ci_msg').innerHTML = `<span style="color:#16a34a;">✓ ${markCheckedIn ? 'Checked in.' : 'Uploaded.'} ${okCount?okCount+' guest(s) saved.':''}</span>`;
+      setTimeout(() => { closeModal(); bookings(); }, 900);
+    }
+  }
+  $('ci_upload').onclick = () => doUpload(true);
+  $('ci_uploadOnly').onclick = () => doUpload(false);
+}
+
+// ---------- Reports ----------
+let currentPeriod = 'monthly';
+let customStart = '', customEnd = '';
+async function reports() {
+  const url = currentPeriod === 'custom'
+    ? `/api/reports/custom?start=${customStart}&end=${customEnd}`
+    : `/api/reports/${currentPeriod}`;
+  const data = await api(url);
+  const inr = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  const csvUrl = currentPeriod === 'custom'
+    ? `/api/reports/custom/csv?start=${customStart}&end=${customEnd}`
+    : `/api/reports/${currentPeriod}/csv`;
+
+  const methodLabels = { cash:'💵 Cash', gpay:'📱 GPay', phonepe:'📱 PhonePe', paytm:'📱 Paytm', upi:'📱 UPI', card:'💳 Card', bank_transfer:'🏦 Bank Transfer', cheque:'📝 Cheque', other:'Other' };
+  const methodEntries = Object.entries(data.byMethod || {}).sort((a,b) => b[1] - a[1]);
+  const methodTotal = methodEntries.reduce((s, [_,v]) => s + v, 0) || 1;
+
+  $('panel').innerHTML = `
+    <h2 style="margin-bottom:6px;">Reports &amp; Analytics</h2>
+    <p class="muted" style="margin:0 0 18px;">Period: <strong>${data.start}</strong> to <strong>${data.end}</strong> · ${data.days} day(s)</p>
+
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:18px;">
+      ${[['today','Today'],['weekly','Last 7 Days'],['monthly','Last 30 Days'],['yearly','Last Year']].map(([p,label]) => `<button class="${p===currentPeriod?'primary':'ghost'}" data-p="${p}">${label}</button>`).join('')}
+      <span style="margin-left:10px;">|</span>
+      <input type="date" id="rep_start" value="${customStart||data.start}" style="padding:8px;border:1px solid #ddd;border-radius:4px;" />
+      <span>→</span>
+      <input type="date" id="rep_end" value="${customEnd||data.end}" style="padding:8px;border:1px solid #ddd;border-radius:4px;" />
+      <button class="${currentPeriod==='custom'?'primary':'ghost'}" id="rep_custom">Apply Custom Range</button>
+      <a class="primary" style="text-decoration:none;padding:10px 18px;border-radius:6px;margin-left:auto;" href="${csvUrl}">⬇ Download CSV</a>
+      <button class="ghost" onclick="window.print()">🖨 Print</button>
+    </div>
+
+    <h3 style="margin:0 0 10px;color:#1a3a5c;">Financial Summary</h3>
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat"><div class="label">Total Bookings</div><div class="value">${data.totals.bookings}</div></div>
+      <div class="stat"><div class="label">Booked Value</div><div class="value">${inr(data.totals.booked)}</div></div>
+      <div class="stat" style="border-left-color:#16a34a;"><div class="label">Collected</div><div class="value">${inr(data.totals.collected)}</div></div>
+      <div class="stat" style="border-left-color:${data.totals.pending>0?'#dc2626':'#16a34a'};"><div class="label">Pending Dues</div><div class="value">${inr(data.totals.pending)}</div></div>
+      <div class="stat" style="border-left-color:#3b82f6;"><div class="label">Occupancy</div><div class="value">${data.totals.occupancy}%</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;">
+      <div class="card-block">
+        <h4 style="margin:0 0 14px;">💰 Revenue by Payment Method</h4>
+        ${methodEntries.length ? methodEntries.map(([m,v]) => `
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+              <span>${methodLabels[m] || m}</span>
+              <strong>${inr(v)} <small class="muted">(${Math.round(v/methodTotal*100)}%)</small></strong>
+            </div>
+            <div style="background:#e5e7eb;height:8px;border-radius:4px;overflow:hidden;">
+              <div style="background:#c9a96e;height:100%;width:${Math.round(v/methodTotal*100)}%;"></div>
+            </div>
+          </div>
+        `).join('') : '<p class="muted">No payments collected in this period.</p>'}
+      </div>
+
+      <div class="card-block">
+        <h4 style="margin:0 0 14px;">📊 Bookings by Status</h4>
+        <table style="font-size:13px;"><tbody>
+          ${Object.entries(data.byStatus || {}).map(([s,c]) => `<tr><td><span class="badge ${s}">${s.replace('_',' ')}</span></td><td style="text-align:right;"><strong>${c}</strong></td></tr>`).join('') || '<tr><td class="muted">No bookings.</td></tr>'}
+        </tbody></table>
+      </div>
+
+      <div class="card-block">
+        <h4 style="margin:0 0 14px;">🏆 Top Customers (by Revenue)</h4>
+        ${data.topCustomers.length ? `<table style="font-size:13px;"><thead><tr><th>Guest</th><th>Stays</th><th style="text-align:right;">Revenue</th></tr></thead><tbody>
+          ${data.topCustomers.map(c => `<tr><td>${esc(c.customer)}<br><small class="muted">${esc(c.contact||'')}</small></td><td>${c.stays}</td><td style="text-align:right;"><strong>${inr(c.revenue)}</strong></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No customers in this period.</p>'}
+      </div>
+
+      <div class="card-block">
+        <h4 style="margin:0 0 14px;">🛏 Top Rooms (by Revenue)</h4>
+        ${data.topRooms.length ? `<table style="font-size:13px;"><thead><tr><th>Room</th><th>Bookings</th><th style="text-align:right;">Revenue</th></tr></thead><tbody>
+          ${data.topRooms.map(r => `<tr><td>${esc(r.room)}</td><td>${r.bookings}</td><td style="text-align:right;"><strong>${inr(r.revenue)}</strong></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No rooms used in this period.</p>'}
+      </div>
+    </div>
+
+    <h3 style="margin:24px 0 10px;color:#1a3a5c;">Bookings in Period (${data.rows.length})</h3>
+    <table style="font-size:13px;">
+      <thead><tr><th>#</th><th>Customer</th><th>Room</th><th>Stay</th><th>Status</th><th>Total</th><th>Paid</th><th>Pending</th></tr></thead>
+      <tbody>${data.rows.map(r => `<tr>
+        <td>${r.id}</td>
+        <td>${esc(r.customer)}<br><small class="muted">${esc(r.contact||'')}</small></td>
+        <td>${esc(r.room)} <small class="muted">(${esc(r.category)})</small></td>
+        <td>${r.check_in} → ${r.check_out}</td>
+        <td><span class="badge ${r.status}">${r.status.replace('_',' ')}</span></td>
+        <td><strong>${inr(r.total)}</strong></td>
+        <td style="color:#16a34a;"><strong>${inr(r.paid)}</strong></td>
+        <td style="color:${r.pending>0?'#dc2626':'#9ca3af'};"><strong>${inr(r.pending)}</strong></td>
+      </tr>`).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:30px;">No bookings in this period</td></tr>'}</tbody>
+    </table>
+
+    <h3 style="margin:24px 0 10px;color:#1a3a5c;">Payment Transactions in Period (${data.payments.length})</h3>
+    <table style="font-size:13px;">
+      <thead><tr><th>Date</th><th>Booking</th><th>Customer</th><th>Method</th><th>Type</th><th style="text-align:right;">Amount</th><th>Notes</th></tr></thead>
+      <tbody>${data.payments.map(p => `<tr>
+        <td>${(p.paid_at||'').slice(0,16).replace('T',' ')}</td>
+        <td>#${p.booking_id}</td>
+        <td>${esc(p.customer)}</td>
+        <td>${methodLabels[p.method] || p.method}</td>
+        <td>${esc(p.type)}</td>
+        <td style="text-align:right;"><strong>${inr(p.amount)}</strong></td>
+        <td>${esc(p.notes||'')}</td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:30px;">No payments in this period</td></tr>'}</tbody>
+    </table>`;
+
+  document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { currentPeriod = b.dataset.p; reports(); });
+  $('rep_custom').onclick = () => {
+    const s = $('rep_start').value, e = $('rep_end').value;
+    if (!s || !e) return alert('Pick both dates');
+    customStart = s; customEnd = e; currentPeriod = 'custom'; reports();
+  };
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// boot
+fetch('/api/me').then(r => r.json()).then(d => d.admin ? renderApp() : renderLogin());
+</script>
+</body>
+</html>
