@@ -679,14 +679,32 @@ async function sendMail({ to, subject, html, text }) {
       console.error('[EMAIL ERROR] Missing SMTP config:', { host: !!host, user: !!user, pass: !!pass });
       return { sent: false, reason: 'SMTP not configured.' };
     }
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      family: 4,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+    const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+async function sendMail(to, subject, html) {
+  try {
+    const info = await transporter.sendMail({
+      from: `"The Dream Residency" <${process.env.SMTP_USER}>`,
+      to,
+      subject,
+      html,
     });
+
+    console.log('Email sent:', info.messageId);
+  } catch (error) {
+    console.error('EMAIL ERROR:', error);
+  }
+}
 
     //const transporter = nodemailer.createTransport({
     //  host, port, secure: port === 465,
