@@ -563,41 +563,84 @@ function computeTotal({ check_in, check_out, room_price, rooms_count }) {
   return nights * (parseFloat(room_price) || 0) * Math.max(1, parseInt(rooms_count) || 1);
 }
 
-function buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddress, name, bookingId, roomType, checkIn, checkOut, nights, guests, total }) {
+function buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddress, name, bookingId, roomType, checkIn, checkOut, nights, guests, total, guestsList }) {
+  const MAPS_LINK = 'https://www.google.com/maps/search/?api=1&query=The+Dream+Residency+Sakinaka+Mumbai';
+
+  // Format guest names list (if provided)
+  let guestNamesHtml = '';
+  if (guestsList && guestsList.length > 0) {
+    const names = guestsList.map((g, i) => `<tr><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:1px;color:#7a9bb5;">GUEST ${i + 1}</td><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:13px;">${g.name || ''}${g.age ? ' &nbsp;<span style="color:#7a9bb5;font-size:11px;">(Age: '+g.age+')</span>' : ''}</td></tr>`).join('');
+    guestNamesHtml = names;
+  }
+
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f0ede8;font-family:Georgia,serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0ede8;padding:30px 0;">
   <tr><td align="center">
-    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:4px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
-      <tr><td style="background:#1a3a5c;padding:32px 36px;text-align:center;">
-        <h1 style="color:#c9a96e;margin:0;font-size:26px;letter-spacing:2px;">${hotelName}</h1>
-        <p style="color:#a8c4d8;margin:6px 0 0;font-size:11px;letter-spacing:4px;text-transform:uppercase;">BOOKING CONFIRMED</p>
-      </td></tr>
-      <tr><td style="padding:32px 36px;">
-        <p style="margin:0 0 18px;color:#374151;font-size:15px;">Dear <strong>${name}</strong>,</p>
-        <p style="margin:0 0 24px;color:#555;font-size:14px;line-height:1.7;">We're delighted to confirm your reservation. We look forward to welcoming you to ${hotelName}.</p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e2d3d;border-radius:4px;overflow:hidden;margin-bottom:24px;">
-          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">BOOKING NO.</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#c9a96e;font-weight:700;font-size:16px;">#${bookingId}</td></tr>
-          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">ROOM TYPE</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${roomType}</td></tr>
-          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">CHECK-IN</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${checkIn} · ${checkinTime}</td></tr>
-          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">CHECK-OUT</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${checkOut} (${nights} night${nights>1?'s':''})</td></tr>
-          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">GUESTS</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${guests}</td></tr>
-          <tr><td style="padding:12px 18px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#c9a96e;">TOTAL AMOUNT</td><td style="padding:12px 18px;color:#c9a96e;font-weight:700;font-size:18px;">&#8377;${total.toLocaleString('en-IN')}</td></tr>
-        </table>
-        <p style="margin:0 0 18px;color:#555;font-size:13px;line-height:1.6;">Please carry your original photo ID (Aadhar/Passport) for check-in.</p>
-        <div style="background:#f9f6f0;border:1px solid #e8dec5;border-radius:4px;padding:16px 18px;margin-bottom:20px;">
-          <strong style="color:#1a3a5c;font-size:13px;">Contact Us</strong><br>
-          <span style="color:#555;font-size:13px;">&#128222; ${hotelPhone}</span><br>
-          <span style="color:#555;font-size:13px;">&#128205; ${hotelAddress}</span>
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:6px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.12);">
+
+      <!-- HEADER -->
+      <tr><td style="background:linear-gradient(135deg,#1a3a5c 0%,#0f2540 100%);padding:36px 36px 28px;text-align:center;">
+        <p style="color:#c9a96e;margin:0 0 4px;font-size:11px;letter-spacing:5px;text-transform:uppercase;">Welcome to</p>
+        <h1 style="color:#ffffff;margin:0 0 6px;font-size:28px;letter-spacing:2px;">${hotelName}</h1>
+        <p style="color:#a8c4d8;margin:0;font-size:10px;letter-spacing:5px;text-transform:uppercase;">Sakinaka, Mumbai</p>
+        <div style="margin:18px auto 0;display:inline-block;background:#c9a96e;border-radius:20px;padding:6px 20px;">
+          <span style="color:#1a3a5c;font-size:11px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;">&#10003; Booking Confirmed</span>
         </div>
-        <p style="margin:0 0 6px;color:#555;font-size:13px;line-height:1.6;">If you have any questions, please don't hesitate to contact us.</p>
-        <p style="margin:18px 0 0;color:#1a3a5c;font-size:13px;"><em>Warm regards,</em><br><strong>${hotelName}</strong></p>
       </td></tr>
-      <tr><td style="background:#1a3a5c;padding:16px 36px;text-align:center;">
-        <p style="margin:0;color:#7a9bb5;font-size:11px;">This is an automated confirmation email. Please do not reply.</p>
+
+      <!-- GREETING -->
+      <tr><td style="padding:28px 36px 12px;">
+        <p style="margin:0 0 10px;color:#1a3a5c;font-size:18px;font-weight:bold;">Dear ${name},</p>
+        <p style="margin:0 0 8px;color:#555;font-size:14px;line-height:1.8;">Warm greetings from <strong>${hotelName}</strong>!</p>
+        <p style="margin:0 0 20px;color:#555;font-size:14px;line-height:1.8;">We are delighted to confirm your reservation and look forward to welcoming you for a memorable stay. Our team is prepared to ensure your comfort and satisfaction throughout your visit.</p>
       </td></tr>
+
+      <!-- BOOKING DETAILS TABLE -->
+      <tr><td style="padding:0 36px 20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e2d3d;border-radius:6px;overflow:hidden;">
+          <tr><td colspan="2" style="padding:12px 18px;background:#0f2540;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#c9a96e;font-weight:bold;">&#128196; Booking Details</td></tr>
+          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;width:42%;">Booking No.</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#c9a96e;font-weight:700;font-size:18px;">#${bookingId}</td></tr>
+          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">Room Type</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${roomType}</td></tr>
+          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">Check-In</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#4ade80;font-size:14px;font-weight:600;">${checkIn} &nbsp;&#10132;&nbsp; <span style="color:#7a9bb5;font-size:12px;">${checkinTime} onwards</span></td></tr>
+          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">Check-Out</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#fb923c;font-size:14px;font-weight:600;">${checkOut} &nbsp;<span style="color:#7a9bb5;font-size:12px;">(${nights} night${nights > 1 ? 's' : ''})</span></td></tr>
+          <tr><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a9bb5;">No. of Guests</td><td style="padding:12px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:14px;">${guests} Guest${guests > 1 ? 's' : ''}</td></tr>
+          ${guestNamesHtml}
+          <tr><td style="padding:14px 18px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#c9a96e;font-weight:bold;">Total Amount</td><td style="padding:14px 18px;color:#c9a96e;font-weight:700;font-size:22px;">&#8377;${total.toLocaleString('en-IN')}</td></tr>
+        </table>
+      </td></tr>
+
+      <!-- ID NOTICE -->
+      <tr><td style="padding:0 36px 20px;">
+        <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:4px;padding:12px 16px;">
+          <p style="margin:0;color:#92400e;font-size:13px;">&#9888;&nbsp; <strong>Important:</strong> Please carry a valid Government-issued Photo ID (Aadhar Card / Passport / Driving Licence) at the time of check-in.</p>
+        </div>
+      </td></tr>
+
+      <!-- HOTEL LOCATION -->
+      <tr><td style="padding:0 36px 24px;">
+        <div style="background:#f9f6f0;border:1px solid #e8dec5;border-radius:6px;padding:18px 20px;">
+          <p style="margin:0 0 10px;color:#1a3a5c;font-size:13px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">&#127970; Our Location</p>
+          <p style="margin:0 0 6px;color:#555;font-size:13px;line-height:1.7;">&#128205; ${hotelAddress || 'Sakinaka, Andheri East, Mumbai, Maharashtra 400072'}</p>
+          <p style="margin:0 0 10px;color:#555;font-size:13px;">&#128222; ${hotelPhone}</p>
+          <a href="${MAPS_LINK}" target="_blank" style="display:inline-block;background:#1a3a5c;color:#c9a96e;text-decoration:none;padding:10px 20px;border-radius:4px;font-size:12px;font-weight:bold;letter-spacing:1px;">&#128506; Get Directions on Google Maps</a>
+        </div>
+      </td></tr>
+
+      <!-- CLOSING -->
+      <tr><td style="padding:0 36px 28px;">
+        <p style="margin:0 0 6px;color:#555;font-size:13px;line-height:1.7;">Should you have any special requests or require assistance prior to your arrival, please do not hesitate to reach out to us. We are here to make your stay truly exceptional.</p>
+        <p style="margin:18px 0 0;color:#1a3a5c;font-size:14px;line-height:1.8;"><em>With warm regards,</em><br><strong style="font-size:15px;">${hotelName} Team</strong><br><span style="color:#888;font-size:12px;">Sakinaka, Mumbai</span></p>
+      </td></tr>
+
+      <!-- FOOTER -->
+      <tr><td style="background:#1a3a5c;padding:18px 36px;text-align:center;">
+        <p style="margin:0 0 4px;color:#7a9bb5;font-size:11px;">This is an automated booking confirmation. Please do not reply to this email.</p>
+        <p style="margin:0;color:#4a6a8a;font-size:10px;">&#169; ${new Date().getFullYear()} ${hotelName} &bull; Sakinaka, Mumbai</p>
+      </td></tr>
+
     </table>
   </td></tr>
 </table>
@@ -1414,12 +1457,35 @@ async function startServer() {
         const checkinTime  = await getSetting('default_checkin_time', '11:00');
         const hotelPhone   = await getSetting('phone', '+91 00000 00000');
         const hotelAddress = await getSetting('address', '');
+        // Parse guest names from guest_details JSON
+        let guestsList = [];
+        try { guestsList = reqRow.guest_details ? JSON.parse(reqRow.guest_details) : []; } catch {}
+        const guestNamesText = guestsList.length > 0
+          ? guestsList.map((g, i) => `  Guest ${i + 1}: ${g.name || ''}${g.age ? ' (Age: ' + g.age + ')' : ''}`).join('\n')
+          : '';
         try {
           emailResult = await sendMail({
             to: reqRow.email,
             subject: `Booking Confirmed – ${hotelName} (Booking #${bk.lastInsertRowid})`,
-            text: `Dear ${reqRow.name},\n\nYour booking at ${hotelName} is confirmed.\n\nBooking #${bk.lastInsertRowid}\nRoom Type: ${rtName}\nCheck-in: ${reqRow.check_in} at ${checkinTime}\nCheck-out: ${reqRow.check_out} (${nights} night${nights > 1 ? 's' : ''})\nGuests: ${reqRow.guests || 1}\nTotal: ₹${computedTotal.toLocaleString('en-IN')}\n\nWarm regards,\n${hotelName}`,
-            html: buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddress, name: reqRow.name, bookingId: bk.lastInsertRowid, roomType: rtName, checkIn: reqRow.check_in, checkOut: reqRow.check_out, nights, guests: reqRow.guests || 1, total: computedTotal }),
+            text: `Dear ${reqRow.name},\n\nWarm greetings from ${hotelName}!\n\nWe are delighted to confirm your reservation.\n\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `BOOKING DETAILS\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `Booking No.  : #${bk.lastInsertRowid}\n` +
+              `Room Type    : ${rtName}\n` +
+              `Check-In     : ${reqRow.check_in} at ${checkinTime}\n` +
+              `Check-Out    : ${reqRow.check_out} (${nights} night${nights > 1 ? 's' : ''})\n` +
+              `Guests       : ${reqRow.guests || 1}\n` +
+              (guestNamesText ? `Guest Names  :\n${guestNamesText}\n` : '') +
+              `Total Amount : Rs. ${computedTotal.toLocaleString('en-IN')}\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `IMPORTANT: Please carry a valid Government-issued Photo ID (Aadhar/Passport) for check-in.\n\n` +
+              `OUR LOCATION\n` +
+              `${hotelAddress || 'Sakinaka, Andheri East, Mumbai, Maharashtra 400072'}\n` +
+              `Phone: ${hotelPhone}\n` +
+              `Google Maps: https://www.google.com/maps/search/?api=1&query=The+Dream+Residency+Sakinaka+Mumbai\n\n` +
+              `With warm regards,\n${hotelName} Team\nSakinaka, Mumbai`,
+            html: buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddress, name: reqRow.name, bookingId: bk.lastInsertRowid, roomType: rtName, checkIn: reqRow.check_in, checkOut: reqRow.check_out, nights, guests: reqRow.guests || 1, total: computedTotal, guestsList }),
           });
         } catch (e) { emailResult = { sent: false, reason: e.message }; }
       }
