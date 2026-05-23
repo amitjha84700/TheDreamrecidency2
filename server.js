@@ -1,12 +1,12 @@
 'use strict';
-const express    = require('express');
-const session    = require('express-session');
-const multer     = require('multer');
+const express = require('express');
+const session = require('express-session');
+const multer = require('multer');
 const nodemailer = require('nodemailer');
-const path       = require('path');
-const fs         = require('fs');
+const path = require('path');
+const fs = require('fs');
 
-const app  = express();
+const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
 const IS_PG = !!process.env.DATABASE_URL;
 
@@ -408,26 +408,26 @@ async function seedRoomTypes() {
 
 // ─── Default site content ─────────────────────────────────────────────────────
 const DEFAULTS = {
-  hotel_name:            'The Dream Residency',
-  tagline:               'A Boutique Stay of Elegance & Comfort',
-  about:                 'Welcome to The Dream Residency — a premium boutique hotel offering modern rooms, fine dining, and personalized hospitality. Whether you are visiting for business, leisure, or a special celebration, our dedicated team ensures every moment of your stay is memorable.',
-  hero_image:            'img/lobby.png',
-  about_image:           'img/collage.png',
-  dining_text:           'Savour authentic flavours at our in-house restaurant. From traditional Indian cuisine to continental favourites, our chefs craft every dish with care, using the freshest seasonal ingredients.',
-  dining_image:          '',
-  amenities:             'Free Wi-Fi, 24x7 Room Service, Restaurant, Power Backup, Laundry, Travel Desk',
-  phone:                 '+91 00000 00000',
-  phone2:                '',
-  email:                 'contact@dreamresidency.com',
-  address:               'Your address here',
-  admin_email:           process.env.ADMIN_EMAIL    || 'doremon69sizuka@gmail.com',
-  smtp_host:             process.env.SMTP_HOST      || 'smtp.gmail.com',
-  smtp_port:             process.env.SMTP_PORT      || '587',
-  smtp_user:             process.env.SMTP_USER      || 'doremon69sizuka@gmail.com',
-  smtp_pass:             process.env.SMTP_PASS      || 'ljxl ihtv voan xtxe',
-  smtp_from_name:        process.env.SMTP_FROM_NAME || 'The Dream Residency',
+  hotel_name: 'The Dream Residency',
+  tagline: 'A Boutique Stay of Elegance & Comfort',
+  about: 'Welcome to The Dream Residency — a premium boutique hotel offering modern rooms, fine dining, and personalized hospitality. Whether you are visiting for business, leisure, or a special celebration, our dedicated team ensures every moment of your stay is memorable.',
+  hero_image: 'img/lobby.png',
+  about_image: 'img/collage.png',
+  dining_text: 'Savour authentic flavours at our in-house restaurant. From traditional Indian cuisine to continental favourites, our chefs craft every dish with care, using the freshest seasonal ingredients.',
+  dining_image: '',
+  amenities: 'Free Wi-Fi, 24x7 Room Service, Restaurant, Power Backup, Laundry, Travel Desk',
+  phone: '+91 00000 00000',
+  phone2: '',
+  email: 'contact@dreamresidency.com',
+  address: 'Your address here',
+  admin_email: process.env.ADMIN_EMAIL || 'doremon69sizuka@gmail.com',
+  smtp_host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  smtp_port: process.env.SMTP_PORT || '587',
+  smtp_user: process.env.SMTP_USER || 'doremon69sizuka@gmail.com',
+  smtp_pass: process.env.SMTP_PASS || 'asdc bpya nrke zxbh',
+  smtp_from_name: process.env.SMTP_FROM_NAME || 'The Dream Residency',
   document_storage_path: './uploads/customer_documents',
-  default_checkin_time:  '11:00',
+  default_checkin_time: '11:00',
 };
 
 async function initDefaults() {
@@ -439,12 +439,12 @@ async function initDefaults() {
   }
   // Backfill env vars over blank rows (covers existing DBs on fresh deploys)
   const envMap = {
-    smtp_host:      process.env.SMTP_HOST,
-    smtp_port:      process.env.SMTP_PORT,
-    smtp_user:      process.env.SMTP_USER,
-    smtp_pass:      process.env.SMTP_PASS,
+    smtp_host: process.env.SMTP_HOST,
+    smtp_port: process.env.SMTP_PORT,
+    smtp_user: process.env.SMTP_USER,
+    smtp_pass: process.env.SMTP_PASS,
     smtp_from_name: process.env.SMTP_FROM_NAME,
-    admin_email:    process.env.ADMIN_EMAIL,
+    admin_email: process.env.ADMIN_EMAIL,
   };
   for (const [k, v] of Object.entries(envMap)) {
     if (v && v.trim()) {
@@ -456,14 +456,14 @@ async function initDefaults() {
   }
   // Ensure SMTP/image defaults are never blank
   const blankFills = [
-    ['smtp_host',      'smtp.gmail.com'],
-    ['smtp_port',      '587'],
-    ['smtp_user',      'doremon69sizuka@gmail.com'],
-    ['smtp_pass',      'ljxl ihtv voan xtxe'],
-    ['admin_email',    'doremon69sizuka@gmail.com'],
+    ['smtp_host', 'smtp.gmail.com'],
+    ['smtp_port', '587'],
+    ['smtp_user', 'doremon69sizuka@gmail.com'],
+    ['smtp_pass', 'asdc bpya nrke zxbh'],
+    ['admin_email', 'doremon69sizuka@gmail.com'],
     ['smtp_from_name', 'The Dream Residency'],
-    ['hero_image',     'img/lobby.png'],
-    ['about_image',    'img/collage.png'],
+    ['hero_image', 'img/lobby.png'],
+    ['about_image', 'img/collage.png'],
   ];
   for (const [k, v] of blankFills) {
     await db.run(
@@ -503,19 +503,19 @@ function resolveDocStorage() {
 }
 
 const SMTP_PROVIDERS = {
-  'gmail.com':       { host: 'smtp.gmail.com',        port: 587 },
-  'googlemail.com':  { host: 'smtp.gmail.com',        port: 587 },
-  'outlook.com':     { host: 'smtp.office365.com',    port: 587 },
-  'hotmail.com':     { host: 'smtp.office365.com',    port: 587 },
-  'live.com':        { host: 'smtp.office365.com',    port: 587 },
-  'office365.com':   { host: 'smtp.office365.com',    port: 587 },
-  'yahoo.com':       { host: 'smtp.mail.yahoo.com',   port: 587 },
-  'yahoo.co.in':     { host: 'smtp.mail.yahoo.com',   port: 587 },
-  'yahoo.in':        { host: 'smtp.mail.yahoo.com',   port: 587 },
-  'zoho.com':        { host: 'smtp.zoho.com',         port: 587 },
-  'zoho.in':         { host: 'smtp.zoho.in',          port: 587 },
-  'icloud.com':      { host: 'smtp.mail.me.com',      port: 587 },
-  'me.com':          { host: 'smtp.mail.me.com',      port: 587 },
+  'gmail.com': { host: 'smtp.gmail.com', port: 587 },
+  'googlemail.com': { host: 'smtp.gmail.com', port: 587 },
+  'outlook.com': { host: 'smtp.office365.com', port: 587 },
+  'hotmail.com': { host: 'smtp.office365.com', port: 587 },
+  'live.com': { host: 'smtp.office365.com', port: 587 },
+  'office365.com': { host: 'smtp.office365.com', port: 587 },
+  'yahoo.com': { host: 'smtp.mail.yahoo.com', port: 587 },
+  'yahoo.co.in': { host: 'smtp.mail.yahoo.com', port: 587 },
+  'yahoo.in': { host: 'smtp.mail.yahoo.com', port: 587 },
+  'zoho.com': { host: 'smtp.zoho.com', port: 587 },
+  'zoho.in': { host: 'smtp.zoho.in', port: 587 },
+  'icloud.com': { host: 'smtp.mail.me.com', port: 587 },
+  'me.com': { host: 'smtp.mail.me.com', port: 587 },
 };
 function detectSmtp(email) {
   if (!email || !email.includes('@')) return null;
@@ -569,7 +569,7 @@ function buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddre
   // Format guest names list (if provided)
   let guestNamesHtml = '';
   if (guestsList && guestsList.length > 0) {
-    const names = guestsList.map((g, i) => `<tr><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:1px;color:#7a9bb5;">GUEST ${i + 1}</td><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:13px;">${g.name || ''}${g.age ? ' &nbsp;<span style="color:#7a9bb5;font-size:11px;">(Age: '+g.age+')</span>' : ''}</td></tr>`).join('');
+    const names = guestsList.map((g, i) => `<tr><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;font-size:12px;letter-spacing:1px;color:#7a9bb5;">GUEST ${i + 1}</td><td style="padding:6px 18px;border-bottom:1px solid #2d3f50;color:#ffffff;font-size:13px;">${g.name || ''}${g.age ? ' &nbsp;<span style="color:#7a9bb5;font-size:11px;">(Age: ' + g.age + ')</span>' : ''}</td></tr>`).join('');
     guestNamesHtml = names;
   }
 
@@ -648,22 +648,27 @@ function buildConfirmationEmail({ hotelName, checkinTime, hotelPhone, hotelAddre
 }
 
 async function sendMail({ to, subject, html, text }) {
-  const host = await getSetting('smtp_host');
-  const user = await getSetting('smtp_user');
-  const pass = await getSetting('smtp_pass');
-  if (!host || !user || !pass) return { sent: false, reason: 'SMTP not configured.' };
-  const port = parseInt(await getSetting('smtp_port', '587'));
-  const transporter = nodemailer.createTransport({
-    host, port, secure: port === 465,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false },
-  });
-  const fromName = await getSetting('smtp_from_name', 'The Dream Residency');
-  const adminCc  = await getSetting('admin_email') || null;
-  const mailOpts = { from: `"${fromName}" <${user}>`, to, subject, text, html };
-  if (adminCc && adminCc !== user) mailOpts.cc = adminCc;
-  await transporter.sendMail(mailOpts);
-  return { sent: true };
+  try {
+    const host = await getSetting('smtp_host');
+    const user = await getSetting('smtp_user');
+    const pass = await getSetting('smtp_pass');
+    if (!host || !user || !pass) return { sent: false, reason: 'SMTP not configured.' };
+    const port = parseInt(await getSetting('smtp_port', '587'));
+    const transporter = nodemailer.createTransport({
+      host, port, secure: port === 465,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+    });
+    const fromName = await getSetting('smtp_from_name', 'The Dream Residency');
+    const adminCc = await getSetting('admin_email') || null;
+    const mailOpts = { from: `"${fromName}" <${user}>`, to, subject, text, html };
+    if (adminCc && adminCc !== user) mailOpts.cc = adminCc;
+    await transporter.sendMail(mailOpts);
+    return { sent: true };
+  } catch (err) {
+    console.error('[EMAIL ERROR]', err.message);
+    return { sent: false, reason: err.message };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -678,22 +683,22 @@ async function startServer() {
 
   // 3. Add any missing columns (migrations for existing databases)
   const migrations = [
-    ['rooms',            'image',         'TEXT'],
-    ['rooms',            'features',      'TEXT'],
-    ['bookings',         'guests',        IS_PG ? 'INTEGER DEFAULT 1'  : 'INTEGER DEFAULT 1'],
-    ['bookings',         'guest_details', 'TEXT'],
-    ['bookings',         'rooms_count',   IS_PG ? 'INTEGER DEFAULT 1'  : 'INTEGER DEFAULT 1'],
-    ['bookings',         'room_type',     'TEXT'],
-    ['bookings',         'room_number',   'TEXT'],
-    ['bookings',         'notes',         'TEXT'],
+    ['rooms', 'image', 'TEXT'],
+    ['rooms', 'features', 'TEXT'],
+    ['bookings', 'guests', IS_PG ? 'INTEGER DEFAULT 1' : 'INTEGER DEFAULT 1'],
+    ['bookings', 'guest_details', 'TEXT'],
+    ['bookings', 'rooms_count', IS_PG ? 'INTEGER DEFAULT 1' : 'INTEGER DEFAULT 1'],
+    ['bookings', 'room_type', 'TEXT'],
+    ['bookings', 'room_number', 'TEXT'],
+    ['bookings', 'notes', 'TEXT'],
     ['booking_requests', 'guest_details', 'TEXT'],
-    ['booking_requests', 'rooms_required',IS_PG ? 'INTEGER DEFAULT 1'  : 'INTEGER DEFAULT 1'],
-    ['booking_requests', 'country_code',  'TEXT'],
-    ['booking_requests', 'address',       'TEXT'],
-    ['booking_documents','guest_index',   IS_PG ? 'INTEGER DEFAULT 0'  : 'INTEGER DEFAULT 0'],
-    ['booking_documents','guest_name',    'TEXT'],
-    ['room_types',       'price',         IS_PG ? 'FLOAT8 DEFAULT 0'   : 'REAL DEFAULT 0'],
-    ['customers',        'address',       'TEXT'],
+    ['booking_requests', 'rooms_required', IS_PG ? 'INTEGER DEFAULT 1' : 'INTEGER DEFAULT 1'],
+    ['booking_requests', 'country_code', 'TEXT'],
+    ['booking_requests', 'address', 'TEXT'],
+    ['booking_documents', 'guest_index', IS_PG ? 'INTEGER DEFAULT 0' : 'INTEGER DEFAULT 0'],
+    ['booking_documents', 'guest_name', 'TEXT'],
+    ['room_types', 'price', IS_PG ? 'FLOAT8 DEFAULT 0' : 'REAL DEFAULT 0'],
+    ['customers', 'address', 'TEXT'],
   ];
   for (const [table, col, ddl] of migrations) {
     await addColumnIfMissing(table, col, ddl);
@@ -731,7 +736,7 @@ async function startServer() {
     let vid = req.cookies && req.cookies.dr_vid;
     if (!vid) {
       vid = 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
-      res.cookie('dr_vid', vid, { httpOnly: false, maxAge: 1000*60*60*24*365*2, sameSite: 'lax' });
+      res.cookie('dr_vid', vid, { httpOnly: false, maxAge: 1000 * 60 * 60 * 24 * 365 * 2, sameSite: 'lax' });
     }
     req.visitorId = vid;
     next();
@@ -832,7 +837,7 @@ async function startServer() {
       await db.run(
         'UPDATE room_types SET name=?, image=?, short_desc=?, description=?, features=?, display_order=?, price=? WHERE id=?',
         [name ?? rt.name, image ?? rt.image, short_desc ?? rt.short_desc, description ?? rt.description,
-         featStr, display_order ?? rt.display_order, price !== undefined ? Number(price) : (rt.price || 0), rt.id]
+          featStr, display_order ?? rt.display_order, price !== undefined ? Number(price) : (rt.price || 0), rt.id]
       );
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -878,7 +883,7 @@ async function startServer() {
       await db.run(
         'UPDATE rooms SET number=?, category=?, price=?, status=?, description=?, image=?, features=? WHERE id=?',
         [number ?? cur.number, category ?? cur.category, price ?? cur.price, status ?? cur.status,
-         description ?? cur.description, image ?? cur.image, features ?? cur.features, req.params.id]
+        description ?? cur.description, image ?? cur.image, features ?? cur.features, req.params.id]
       );
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -976,7 +981,7 @@ async function startServer() {
       `, [req.params.id]);
       if (!b) return res.status(404).json({ error: 'Not found' });
       let guests = [];
-      if (b.guest_details) { try { guests = JSON.parse(b.guest_details); } catch {} }
+      if (b.guest_details) { try { guests = JSON.parse(b.guest_details); } catch { } }
       res.json({ ...b, guests });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -1199,7 +1204,7 @@ async function startServer() {
         WHERE DATE(b.created_at) BETWEEN ? AND ? OR DATE(b.check_in) BETWEEN ? AND ?
         ORDER BY b.created_at DESC
       `, [start, end, start, end]);
-      const headers = ['id','customer','contact','room','category','check_in','check_out','status','total','paid','pending','created_at'];
+      const headers = ['id', 'customer', 'contact', 'room', 'category', 'check_in', 'check_out', 'status', 'total', 'paid', 'pending', 'created_at'];
       const csv = [headers.join(',')]
         .concat(rows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')))
         .join('\n');
@@ -1254,8 +1259,10 @@ async function startServer() {
       const occ = parseInt(rOccupied.c) || 0;
       const bkd = parseInt(rBooked.c) || 0;
       res.json({
-        rooms: { total: totalRooms, occupied: occ, booked: bkd, available: parseInt(rAvailable.c) || 0,
-                 occupancy: totalRooms ? Math.round(((occ + bkd) / totalRooms) * 100) : 0 },
+        rooms: {
+          total: totalRooms, occupied: occ, booked: bkd, available: parseInt(rAvailable.c) || 0,
+          occupancy: totalRooms ? Math.round(((occ + bkd) / totalRooms) * 100) : 0
+        },
         today: { check_ins: todayCheckIns, check_outs: todayCheckOuts, collected: parseFloat(rToday.s) || 0 },
         in_house: inHouse,
         revenue: { today: parseFloat(rToday.s) || 0, week: parseFloat(rWeek.s) || 0, month: parseFloat(rMonth.s) || 0, pending_dues: parseFloat(rPending.s) || 0 },
@@ -1268,10 +1275,10 @@ async function startServer() {
   app.post('/api/track', async (req, res) => {
     try {
       const vid = req.visitorId;
-      const ip  = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-      const ua  = req.headers['user-agent'] || '';
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      const ua = req.headers['user-agent'] || '';
       const ref = req.headers.referer || (req.body && req.body.referrer) || '';
-      const pg  = (req.body && req.body.path) || '/';
+      const pg = (req.body && req.body.path) || '/';
       const existing = await db.get('SELECT id FROM visitors WHERE visitor_id=?', [vid]);
       if (existing) {
         await db.run('UPDATE visitors SET last_seen=CURRENT_TIMESTAMP, visit_count=visit_count+1, ip=?, user_agent=? WHERE visitor_id=?', [ip, ua, vid]);
@@ -1363,9 +1370,9 @@ async function startServer() {
       `, [req.params.id]);
       bookings.forEach(b => { try { b.guests_list = b.guest_details ? JSON.parse(b.guest_details) : []; } catch { b.guests_list = []; } });
       const docs = await db.all('SELECT * FROM booking_documents WHERE customer_id=? ORDER BY id DESC', [req.params.id]);
-      const totalNights  = bookings.reduce((s, b) => s + (parseInt(b.nights) || 0), 0);
+      const totalNights = bookings.reduce((s, b) => s + (parseInt(b.nights) || 0), 0);
       const totalRevenue = bookings.reduce((s, b) => s + (parseFloat(b.total) || 0), 0);
-      const totalPaid    = bookings.reduce((s, b) => s + (parseFloat(b.paid) || 0), 0);
+      const totalPaid = bookings.reduce((s, b) => s + (parseFloat(b.paid) || 0), 0);
       res.json({
         customer: c, bookings, documents: docs,
         summary: { total_visits: bookings.length, total_nights: totalNights, total_revenue: totalRevenue, total_paid: totalPaid, first_visit: bookings.length ? bookings[bookings.length - 1].check_in : null, last_visit: bookings.length ? bookings[0].check_in : null },
@@ -1424,9 +1431,9 @@ async function startServer() {
 
       const roomNum = String(room_number).trim();
       const rt = (await findRoomType(reqRow.room_type)) || await db.get('SELECT * FROM room_types ORDER BY id LIMIT 1');
-      const rtSlug  = rt ? rt.slug  : 'suite';
+      const rtSlug = rt ? rt.slug : 'suite';
       const rtPrice = rt ? (rt.price || 0) : 0;
-      const rtName  = rt ? rt.name  : (reqRow.room_type || 'Room');
+      const rtName = rt ? rt.name : (reqRow.room_type || 'Room');
 
       let room = await db.get('SELECT * FROM rooms WHERE number=?', [roomNum]);
       if (!room) {
@@ -1453,13 +1460,13 @@ async function startServer() {
 
       let emailResult = { sent: false };
       if (reqRow.email) {
-        const hotelName    = await getSetting('hotel_name', 'The Dream Residency');
-        const checkinTime  = await getSetting('default_checkin_time', '11:00');
-        const hotelPhone   = await getSetting('phone', '+91 00000 00000');
+        const hotelName = await getSetting('hotel_name', 'The Dream Residency');
+        const checkinTime = await getSetting('default_checkin_time', '11:00');
+        const hotelPhone = await getSetting('phone', '+91 00000 00000');
         const hotelAddress = await getSetting('address', '');
         // Parse guest names from guest_details JSON
         let guestsList = [];
-        try { guestsList = reqRow.guest_details ? JSON.parse(reqRow.guest_details) : []; } catch {}
+        try { guestsList = reqRow.guest_details ? JSON.parse(reqRow.guest_details) : []; } catch { }
         const guestNamesText = guestsList.length > 0
           ? guestsList.map((g, i) => `  Guest ${i + 1}: ${g.name || ''}${g.age ? ' (Age: ' + g.age + ')' : ''}`).join('\n')
           : '';
@@ -1564,9 +1571,9 @@ async function startServer() {
     try {
       const b = await db.get('SELECT * FROM bookings WHERE id=?', [req.params.id]);
       if (!b) return res.status(404).json({ error: 'Booking not found' });
-      const docType    = req.body.doc_type || 'ID Proof';
+      const docType = req.body.doc_type || 'ID Proof';
       const guestIndex = parseInt(req.body.guest_index) || 0;
-      const guestName  = req.body.guest_name || '';
+      const guestName = req.body.guest_name || '';
       const saved = [];
       for (const f of (req.files || [])) {
         const r = await db.run(
@@ -1590,7 +1597,7 @@ async function startServer() {
   app.delete('/api/documents/:id', requireAdmin, async (req, res) => {
     try {
       const d = await db.get('SELECT * FROM booking_documents WHERE id=?', [req.params.id]);
-      if (d && d.file_path && fs.existsSync(d.file_path)) { try { fs.unlinkSync(d.file_path); } catch {} }
+      if (d && d.file_path && fs.existsSync(d.file_path)) { try { fs.unlinkSync(d.file_path); } catch { } }
       await db.run('DELETE FROM booking_documents WHERE id=?', [req.params.id]);
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1614,8 +1621,8 @@ async function startServer() {
 
   // ── STATIC / ADMIN ROUTES ─────────────────────────────────────────────────
   app.get('/admin-dream/login', (_, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
-  app.get('/admin-dream',       (_, res) => res.redirect('/admin-dream/login'));
-  app.get('/admin',             (_, res) => res.status(404).send('Not found'));
+  app.get('/admin-dream', (_, res) => res.redirect('/admin-dream/login'));
+  app.get('/admin', (_, res) => res.status(404).send('Not found'));
 
   // ── START ─────────────────────────────────────────────────────────────────
   app.listen(PORT, '0.0.0.0', () => console.log(`Dream Residency running on port ${PORT} [${IS_PG ? 'PostgreSQL' : 'SQLite'}]`));
